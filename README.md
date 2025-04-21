@@ -47,8 +47,6 @@ The plugin must be applied during compilation with the `-fplugin=refl-plugin` sw
 
 If the project is included as a CMake subdirectory then the provided `refl_config(TARGET)` function can be used to configure a target. It applies the plugin and sets it up as a dependency for compilation.
 
-The LLVM development libraries must be installed to build the plugin.
-
 ```CMake
 include(FetchContent)
 FetchContent_Declare(
@@ -57,15 +55,19 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/drecouse/refl.git
   SYSTEM)
 FetchContent_MakeAvailable(refl)
+
+refl_config(MY_TARGET)
 ```
+
+The LLVM development libraries must be installed to build the plugin.
 
 ## Examples
 Multiple small examples are provided to showcase the capabilities of the library. In increasing order of complexity:
-- enums: convert between enum values and names, iterate over each enumerator.
-- factory: automatically retrieve a function pointer to call any constructor
-- serialization: JSON like serializer for any reflected type.
-- deserialize: sample implementation to deserialize the previous output.
-- functions: print and call member functions. Member function wrapper that can programatically set the parameters by name in any order.
+- [enums]: convert between enum values and names, iterate over each enumerator.
+- [factory]: automatically retrieve a function pointer to call any constructor
+- [serialization]: JSON like serializer for any reflected type.
+- [deserialize]: sample implementation to deserialize the previous output.
+- [functions]: print and call member functions. Member function wrapper that can programatically set the parameters by name in any order.
 
 Note that the examples are not meant to be complete nor production ready. They are just presenting some ideas of what is possible with the library.
 
@@ -74,3 +76,8 @@ The library was inspired by the [fire-llvm] project that used a similar method t
 
 [issue]: https://github.com/llvm/llvm-project/issues/45791
 [fire-llvm]: https://github.com/Time0o/fire-llvm
+[enums]: examples/enums/enums.cpp
+[factory]: examples/factory/factory.cpp
+[serialization]: examples/serialization/serialization.cpp
+[deserialize]: examples/deserialize/deserialize.cpp
+[functions]: examples/functions/functions.cpp
