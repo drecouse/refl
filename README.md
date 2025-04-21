@@ -23,8 +23,8 @@ int main() {
         std::print("Member variables:\n");
         // Iterate over each var V in M
         refl::for_each_variable<M>([]<typename V>(){
-            std::print("\t{}", V::name);
-        })
+            std::print("\t{}\n", V::name);
+        });
     });
 }
 ```
@@ -55,7 +55,6 @@ FetchContent_Declare(
   refl
   GIT_SHALLOW    TRUE
   GIT_REPOSITORY https://github.com/drecouse/refl.git
-  GIT_TAG        {COMMIT_HASH}
   SYSTEM)
 FetchContent_MakeAvailable(refl)
 ```
