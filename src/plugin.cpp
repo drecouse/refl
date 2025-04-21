@@ -694,9 +694,3 @@ static FrontendPluginRegistry::Add<ReflectAction>
     X("reflect", "add static reflection to annotated classes");
 
 #pragma clang diagnostic pop
-
-// TODO:
-//  templates? specialize manually!
-//  outside reflection definiton: how to signal to llvm that the class should be
-//      reflected (including arbitrary templated types)
-//  refl::public/protected/private?
