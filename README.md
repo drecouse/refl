@@ -41,6 +41,7 @@ int main() {
 - Tags can only be applied using GNU style attributes: `__attribute__((refl_tag(MyTag{})))`. See this [issue]. Also, the 'refl_tag' part must not be hidden behind a macro.
 - Direct access to the underlying meta information (`refl::meta<T>`) should be avoided as the compiler (and the language server) will see these as errors even when the plugin is in use.
 - Warnings in normal code paths will be issued twice.
+- Only linux is supported for now.
 
 ## Usage
 The plugin must be applied during compilation with the `-fplugin=refl-plugin` switch. The header file must be included before any usage of the library (even before using the attributes).

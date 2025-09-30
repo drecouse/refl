@@ -58,8 +58,7 @@ inline void compile(CompilerInstance* CI, std::string const& FileName, IT FileBe
 
     assert(CInvNewCreated);
 
-    CompilerInstance CINew;
-    CINew.setInvocation(CInvNew);
+    CompilerInstance CINew{CInvNew};
     CINew.setTarget(&Target);
     CINew.createDiagnostics(CI->getVirtualFileSystem());
 
