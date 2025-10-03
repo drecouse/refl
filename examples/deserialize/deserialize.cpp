@@ -22,6 +22,8 @@ private:
 
 public:
     __attribute__((refl_tag(skip_ser{}))) long long value3;
+    #define REFL_CLASS Inner
+    #include <refl/generate.inc>
 };
 
 struct [[refl::all]] Example {
@@ -30,6 +32,8 @@ struct [[refl::all]] Example {
     {
     }
     Inner data;
+    #define REFL_CLASS Example
+    #include <refl/generate.inc>
 };
 
 template <typename T>

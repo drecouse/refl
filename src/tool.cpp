@@ -1,83 +1,31 @@
-#include <clang/AST/Type.h>
-#include <clang/Basic/AttrKinds.h>
-#include <clang/Basic/LangOptions.h>
-#include <clang/Basic/ParsedAttrInfo.h>
-#include <clang/Basic/Specifiers.h>
-#include <llvm/Support/raw_ostream.h>
-#include <string>
-#include <vector>
-
-#include "clang/AST/ASTConsumer.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/DeclCXX.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/DiagnosticIDs.h"
-#include "clang/Basic/SourceLocation.h"
-#include "clang/CodeGen/CodeGenAction.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/CompilerInvocation.h"
-#include "clang/Frontend/FrontendAction.h"
-#include "clang/Frontend/FrontendPluginRegistry.h"
-#include "clang/Rewrite/Core/Rewriter.h"
-
+#include "clang/AST/ASTContext.h"
+#include <clang/AST/Type.h>
+#include "clang/AST/Decl.h"
+#include "clang/AST/DeclCXX.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Frontend/FrontendActions.h"
+#include "clang/Lex/Lexer.h"
+#include "clang/Tooling/CommonOptionsParser.h"
+#include "clang/Tooling/Execution.h"
+#include "clang/Tooling/Refactoring.h"
+#include "clang/Tooling/Refactoring/AtomicChange.h"
+#include "clang/Tooling/Tooling.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Signals.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FormatVariadic.h"
-
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/CompilerInvocation.h"
-#include "clang/Lex/PreprocessorOptions.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include <filesystem>
+#include <fstream>
 
 using namespace clang;
+//using namespace clang::tooling;
 using namespace llvm;
+namespace fs = std::filesystem;
 
 #include "utility.hpp"
-
-template <typename IT>
-inline void compile(CompilerInstance* CI, std::string const& FileName, IT FileBegin, IT FileEnd)
-{
-    auto& Diagnostics{CI->getDiagnostics()};
-    if (Diagnostics.getNumErrors() > 0)
-        return;
-
-    auto& CodeGenOpts{CI->getCodeGenOpts()};
-    auto& Target{CI->getTarget()};
-
-    // create new compiler instance
-    auto CInvNew{std::make_shared<CompilerInvocation>()};
-
-    std::vector<const char*> args;
-    for (auto& it : CodeGenOpts.CommandLineArgs) {
-        args.push_back(it.c_str());
-    }
-
-    bool CInvNewCreated{
-        CompilerInvocation::CreateFromArgs(*CInvNew, args, Diagnostics)
-    };
-
-    assert(CInvNewCreated);
-
-    CompilerInstance CINew{CInvNew};
-    CINew.setTarget(&Target);
-    CINew.createDiagnostics(CI->getVirtualFileSystem());
-
-    // create rewrite buffer
-    std::string FileContent{FileBegin, FileEnd};
-    auto FileMemoryBuffer{MemoryBuffer::getMemBufferCopy(FileContent)};
-
-    // create "virtual" input file
-    auto& PreprocessorOpts{CINew.getPreprocessorOpts()};
-    PreprocessorOpts.addRemappedFile(FileName, FileMemoryBuffer.get());
-
-    // generate code
-    EmitObjAction EmitObj;
-    CINew.ExecuteAction(EmitObj);
-
-    auto _ = FileMemoryBuffer.release(); // intentionally not freed
-}
 
 
 template <typename C>
@@ -100,23 +48,97 @@ template <typename C> ReflStaticMatchCallback(C) -> ReflStaticMatchCallback<C>;
 class ReflRecordMatchCallback
     : public ast_matchers::MatchFinder::MatchCallback {
 public:
-    ReflRecordMatchCallback(ASTContext& Context, FileID* FileID, Rewriter* FileRewriter)
-        : Context_(Context)
-        , FileID_(FileID)
-        , FileRewriter_(FileRewriter)
+    ReflRecordMatchCallback(std::string baseFolder, std::string metaFolder) : mBase{fs::absolute(baseFolder)}, mMeta{fs::absolute(metaFolder)}
     {
     }
     void run(ast_matchers::MatchFinder::MatchResult const& Result) override;
+  
+    void onStartOfTranslationUnit() override {
+        ss = "";
+    }
+    void onEndOfTranslationUnit() override {
+        if (ss != "") {
+            auto& sm = _ctx->getSourceManager();
+            auto fName = sm.getFileEntryForID(sm.getMainFileID())->tryGetRealPathName();
+            auto p = fs::absolute(fs::path{fName.str()});
+            auto rel = fs::relative(p, mBase);
+            auto m = mMeta / rel;
+            auto m2 = m;
+            fs::create_directories(m2.remove_filename());
+            auto f = std::ofstream{m.string() + ".meta.inc"};
+            f << ss << "\n";
+        }
+    }
+    void onTU(ASTContext* ctx) {
+        this->_ctx = ctx;
+    }
 
 private:
     std::set<void*> unique;
-    ASTContext& Context_;
-    FileID* FileID_;
-    Rewriter* FileRewriter_;
+    ASTContext* _ctx;
+    std::string ss;
+    fs::path mBase, mMeta;
 };
+
+// This class substitutes for clang::ast_matchers::MatchFinder by
+// arranging to call 'onTU' at the right time.
+class MyMatchFinder : public ast_matchers::MatchFinder {
+public:      // data
+  ReflRecordMatchCallback *m_handleMatch;
+
+public:      // methods
+  explicit MyMatchFinder(ReflRecordMatchCallback *handleMatch)
+    : m_handleMatch(handleMatch)
+  {}
+
+  // This is what 'newFrontendActionFactory' calls.  It is effectively
+  // the entry point to the FE action system.
+    std::unique_ptr<ASTConsumer> newASTConsumer();
+
+  // This will be invoked by 'MyMatchASTConsumer'/
+  void matchAST(ASTContext &context) 
+  {
+    m_handleMatch->onTU(&context);
+
+    // This does the normal MatchFinder stuff, including calling
+    // 'onStartOfTranslationUnit'.
+    MatchFinder::matchAST(context);
+  }
+};
+
+// This class is a substitute for the 'MatchASTConsumer' class defined
+// in ASTMatchFinder.cpp, inside the implementation of 'MatchFinder'.
+class MyMatchASTConsumer : public ASTConsumer {
+public:      // data
+  MyMatchFinder *m_myFinder;
+
+public:      // methods
+  MyMatchASTConsumer(MyMatchFinder *myFinder)
+    : m_myFinder(myFinder)
+  {}
+
+private:     // methods
+  // This is the ASTConsumer callback we need to override.
+    void HandleTranslationUnit(ASTContext& Context) override;
+};
+
+void MyMatchASTConsumer::HandleTranslationUnit(ASTContext& Context)
+{
+    // Call MyMatchFinder::matchAST instead of MatchFinder::matchAST.
+    m_myFinder->matchAST(Context);
+}
+
+
+// This has to be defined out of line because it needs the definition
+// of 'MyMatchASTConsumer'.
+std::unique_ptr<ASTConsumer> MyMatchFinder::newASTConsumer()
+{
+  return std::make_unique<MyMatchASTConsumer>(this);
+}
 
 void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& Result)
 {
+    auto& Context_ = *_ctx;
     auto& SourceManager{Context_.getSourceManager()};
     auto recordDecl{
         Result.Nodes.getNodeAs<CXXRecordDecl>("refl_record")
@@ -128,12 +150,39 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
         unique.insert(recordDecl->getLocation().getPtrEncoding());
 
         auto spec = getReflSpec(recordDecl, SourceManager, Context_);
+        auto macroNameOverride = getReflMacroName(recordDecl, SourceManager, Context_);
 
         const auto& sname = recordDecl->getName();
         const auto& qname = recordDecl->getQualifiedNameAsString();
-        std::string ss;
+
+        std::string macroName = macroNameOverride;
+        auto rec = [&](this const auto& self, const DeclContext* c) -> void {
+            auto parent = c->getParent();
+            if (parent != nullptr && !parent->isTranslationUnit()) {
+                self(parent);
+                macroName += "_";
+            }
+            if (c->isNamespace()) {
+                auto n = static_cast<const NamespaceDecl*>(c);
+                macroName += n->getName(); 
+            } else if (c->isRecord()) {
+                auto n = static_cast<const CXXRecordDecl*>(c);
+                macroName += n->getName();
+                auto plist = n->getDescribedTemplateParams();
+                if (plist) {
+                    for (auto& it : *plist) {
+                        macroName += formatv("_{}", it->getName());
+                    }
+                }
+            }
+        };
+        if (macroName == "") rec(recordDecl);
+
+        //llvm::outs() << macroName;
         ss +=
-            formatv("public:using _meta=refl::RecordType<{0},\"{0}\",\"{1}\",REFL_TUPLE<", sname, qname);
+            //formatv("namespace refl{template<{2}> struct meta<{3}> : refl::RecordType<{3},\"{0}\",\"{1}\",REFL_TUPLE<", sname, qname, templateSpecList, className);
+            formatv("#define REFLG_{2} public:using _meta=refl::RecordType<{0},\"{0}\",\"{1}\",REFL_TUPLE<", sname, qname, macroName);
+            //formatv("public:using _meta=refl::RecordType<{0},\"{0}\",\"{1}\",REFL_TUPLE<", sname, qname);
         {
             for (int i = 0; auto& it : recordDecl->bases()) {
                 auto acc = it.getAccessSpecifier();
@@ -408,21 +457,51 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
             }
         }
 
-        ss += ">>;";
-
-        FileRewriter_->InsertTextAfter(recordDecl->getEndLoc(), ss);
-        *FileID_ = SourceManager.getFileID(recordDecl->getBeginLoc());
+        //ss += ">> {};}";
+        ss += ">>;\n";
     } else if (enumDecl) {
-        std::string ss;
         const auto& sname = enumDecl->getDeclName();
         const auto& qname = enumDecl->getQualifiedNameAsString();
         int count         = 0;
         for (auto _ : enumDecl->enumerators()) count++;
-
+        std::string macroName = "";
+        auto rec = [&](this const auto& self, const DeclContext* c) -> void {
+            auto parent = c->getParent();
+            if (parent != nullptr && !parent->isTranslationUnit()) {
+                self(parent);
+            }
+            if (c->isNamespace()) {
+                auto n = static_cast<const NamespaceDecl*>(c);
+                macroName += n->getName(); 
+            } else if (c->isRecord()) {
+                auto n = static_cast<const CXXRecordDecl*>(c);
+                macroName += n->getName();
+                auto plist = n->getDescribedTemplateParams();
+                if (plist) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+                    for (auto it = plist->begin(); it != plist->end(); ++it) {
+                        if (it != plist->end()-1) {
+                            macroName += formatv("{}_", (*it)->getName());
+                        } else {
+                            macroName += formatv("{}", (*it)->getName());
+                        }
+                    }
+#pragma clang diagnostic pop
+                }
+            }
+            macroName += "_";
+        };
+        auto parent = enumDecl->getParent();
+        if (parent != nullptr && !parent->isTranslationUnit()) {
+            rec(parent);
+        }
+        macroName += sname.getAsString();
+        //llvm::outs() << macroName;
         ss +=
-            formatv("template<>struct refl::meta<{0}>:EnumType<{0},\"{1}\",\"{0}\">{static "
+            formatv("#define REFLG_{3} template<>struct refl::meta<{0}>:EnumType<{0},\"{1}\",\"{0}\">{static "
                     "constexpr std::array<refl::Enumerator<{0}>,{2}>enumerators={{",
-                    qname, sname, count);
+                    qname, sname, count, macroName);
 
         for (int f = 0; const auto e : enumDecl->enumerators()) {
             const auto& n = e->getName();
@@ -458,55 +537,50 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
             "default:return{{};}}static constexpr "
             "std::optional<{0}>from_string(std::string_view "
             "n)noexcept{{for(const auto&e:enumerators)if(e.name==n)return "
-            "e.value;return std::nullopt;}};",
+            "e.value;return std::nullopt;}};\n",
             qname
         );
-
-        SourceLocation loc;
-        const DeclContext* p = enumDecl;
-        while (!p->getParent()->isTranslationUnit()) {
-            p = p->getParent();
-        }
-        if (isa<NamespaceDecl>(p)) {
-            loc = static_cast<const NamespaceDecl*>(p)
-                      ->getEndLoc()
-                      .getLocWithOffset(1);
-        } else if (isa<TagDecl>(p)) {
-            loc = Lexer::findLocationAfterToken(
-                      static_cast<const TagDecl*>(p)->getEndLoc(),
-                      tok::TokenKind::semi, SourceManager,
-                      Context_.getLangOpts(), true
-            )
-                      .getLocWithOffset(-1);
-        }
-
-        if (loc.isValid()) {
-            FileRewriter_->InsertTextAfter(loc, ss);
-            *FileID_ = SourceManager.getFileID(enumDecl->getBeginLoc());
-        }
     }
 }
 
-class ReflConsumer : public ASTConsumer {
-public:
-    ReflConsumer(FileID* FileID, Rewriter* FileRewriter, bool* FileRewriteError)
-        : FileID_(FileID)
-        , FileRewriter_(FileRewriter)
-        , FileRewriteError_(FileRewriteError)
-    {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+
+// Set up the command line options
+static cl::extrahelp CommonHelp(clang::tooling::CommonOptionsParser::HelpMessage);
+static cl::OptionCategory ReflToolCategory("refl-tool options");
+static cl::opt<std::string> baseFolder("base-path", cl::desc("The common base path for all files."), cl::cat(ReflToolCategory));
+static cl::opt<std::string> metaFolder("meta-path", cl::desc("The meta folder where the output files will be written."), cl::cat(ReflToolCategory));
+
+#pragma clang diagnostic pop
+
+int main(int argc, const char **argv) {
+  llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
+  auto ExpectedParser =
+      tooling::CommonOptionsParser::create(argc, argv, ReflToolCategory);
+  if (!ExpectedParser) {
+    llvm::errs() << ExpectedParser.takeError();
+    return 1;
+  }
+
+    if (baseFolder.getValue() == "" || metaFolder == "") {
+        llvm::errs() << "Both base_path and meta_path arguments are required.\n";
+        return 1;
     }
 
-    void HandleTranslationUnit(ASTContext& Context) override;
+  auto Executor = clang::tooling::createExecutorFromCommandLineArgs(
+      argc, argv, ReflToolCategory);
 
-private:
-    FileID* FileID_;
-    Rewriter* FileRewriter_;
-    bool* FileRewriteError_;
-};
+  if (!Executor) {
+    llvm::errs() << llvm::toString(Executor.takeError()) << "\n";
+    return 1;
+  }
 
-void ReflConsumer::HandleTranslationUnit(ASTContext& Context)
-{
-    using namespace ast_matchers;
+    using namespace clang::ast_matchers;
+    
+    ReflRecordMatchCallback MatchRecordCallback{baseFolder.getValue(), metaFolder.getValue()};
+    MyMatchFinder MatchFinder{&MatchRecordCallback};
 
     auto ReflectedRecordsMatchExpression(cxxRecordDecl(
         anyOf(hasReflectAttr("none"), hasReflectAttr("all"))
@@ -514,86 +588,18 @@ void ReflConsumer::HandleTranslationUnit(ASTContext& Context)
     auto ReflectedEnumMatchExpression(
         enumDecl(anyOf(hasReflectAttr("none"), hasReflectAttr("all")))
     );
-
-    ReflRecordMatchCallback MatchRecordCallback(Context, FileID_, FileRewriter_);
-
-    ast_matchers::MatchFinder MatchFinder;
-
     MatchFinder.addMatcher(
         ReflectedRecordsMatchExpression.bind("refl_record"),
         &MatchRecordCallback
     );
     MatchFinder.addMatcher(ReflectedEnumMatchExpression.bind("refl_enum"), &MatchRecordCallback);
 
-    try {
-        MatchFinder.matchAST(Context);
-        *FileRewriteError_ = false;
-    } catch (ReflError const& e) {
-        auto& Diags{Context.getDiagnostics()};
-
-        unsigned ID{Diags.getDiagnosticIDs()->getCustomDiagID(
-            DiagnosticIDs::Error, e.what()
-        )};
-
-        Diags.Report(e.where(), ID);
-
-        *FileRewriteError_ = true;
-    }
+  auto Err = Executor->get()->execute(clang::tooling::newFrontendActionFactory(&MatchFinder));
+  if (Err) {
+    llvm::errs() << llvm::toString(std::move(Err)) << "\n";
+  }
+  Executor->get()->getToolResults()->forEachResult(
+      [](llvm::StringRef key, llvm::StringRef value) {
+        llvm::errs() << "----" << key.str() << "\n" << value.str() << "\n";
+      });
 }
-
-
-class ReflectAction : public PluginASTAction {
-protected:
-    std::unique_ptr<ASTConsumer>
-    CreateASTConsumer(CompilerInstance& CI, StringRef FileName) override
-    {
-        auto& SourceManager{CI.getSourceManager()};
-        auto& LangOpts{CI.getLangOpts()};
-
-        CI_ = &CI;
-
-        FileName_ = FileName.str();
-
-        FileRewriter_.setSourceMgr(SourceManager, LangOpts);
-
-        return std::make_unique<ReflConsumer>(&FileID_, &FileRewriter_, &FileRewriteError_);
-    }
-
-    bool ParseArgs(CompilerInstance const&, std::vector<std::string> const&) override;
-
-    PluginASTAction::ActionType getActionType() override
-    {
-        return PluginASTAction::ReplaceAction;
-    }
-
-    void EndSourceFileAction() override
-    {
-        if (FileRewriteError_)
-            return;
-
-        auto FileRewriteBuffer{FileRewriter_.getRewriteBufferFor(FileID_)};
-
-        compile(CI_, FileName_, FileRewriteBuffer->begin(), FileRewriteBuffer->end());
-    }
-
-private:
-    CompilerInstance* CI_;
-
-    std::string FileName_;
-    FileID FileID_;
-    Rewriter FileRewriter_;
-    bool FileRewriteError_ = false;
-};
-
-bool ReflectAction::ParseArgs(CompilerInstance const&, std::vector<std::string> const&)
-{
-    return true;
-}
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wglobal-constructors"
-
-static FrontendPluginRegistry::Add<ReflectAction>
-    X("reflect", "add static reflection to annotated classes");
-
-#pragma clang diagnostic pop

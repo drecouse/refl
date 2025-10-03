@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(ex_serialization
     serialization.cpp)
 
-refl_config(ex_serialization)
+refl_config_tool(ex_serialization)
 target_compile_options(ex_serialization PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:
         -Weverything

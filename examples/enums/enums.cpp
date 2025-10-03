@@ -7,6 +7,9 @@ enum class [[refl::all]] TestEnum : int {
     T4 = -1
 };
 
+#define REFL_CLASS TestEnum
+#include <refl/generate.inc>
+
 int main()
 {
     // namespace refl::e contains helper functions for

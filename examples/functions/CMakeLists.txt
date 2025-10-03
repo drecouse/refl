@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(ex_functions
     functions.cpp)
 
-refl_config(ex_functions)
+refl_config_tool(ex_functions)
 target_compile_options(ex_functions PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:
         -Weverything

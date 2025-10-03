@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(ex_factory
     factory.cpp)
 
-refl_config(ex_factory)
+refl_config_tool(ex_factory)
 target_compile_options(ex_factory PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:
         -Weverything

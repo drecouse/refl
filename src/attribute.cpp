@@ -25,16 +25,17 @@ template <unsigned N> cxstring(char const (&)[N]) -> cxstring<N - 1>;
 
 #pragma clang diagnostic pop
 
-template <cxstring SP, cxstring Annotation>
+template <cxstring SP, cxstring Annotation, int nargs>
 class ReflectClassAttrInfo : public ParsedAttrInfo {
 public:
     ReflectClassAttrInfo()
     {
         static constexpr Spelling S[] = {
-            {ParsedAttr::AS_CXX11, SP}
+            {ParsedAttr::AS_CXX11, SP},
+            {ParsedAttr::AS_GNU, SP}
         };
         Spellings = S;
-        OptArgs   = 0;
+        NumArgs   = nargs;
     }
 
     bool diagAppertainsToDecl(Sema& S, const ParsedAttr& Attr, const Decl* D) const override
@@ -50,7 +51,7 @@ public:
 
     AttrHandling handleDeclAttribute(Sema& S, Decl* D, const ParsedAttr& Attr) const override
     {
-        if (Attr.getNumArgs() > 0) {
+        if (Attr.getNumArgs() > nargs) {
             unsigned ID = S.getDiagnostics().getCustomDiagID(
                 DiagnosticsEngine::Error,
                 "'refl::none/all' attributes do not accept arguments"
@@ -58,7 +59,16 @@ public:
             S.Diag(Attr.getLoc(), ID);
             return AttributeNotApplied;
         }
-        D->addAttr(AnnotateAttr::Create(S.Context, static_cast<const char*>(Annotation), nullptr, 0, Attr.getRange(), AnnotateAttr::CXX11_clang_annotate));
+        if (Attr.getNumArgs() > 0) {
+            SmallVector<Expr*, 256> ArgsBuf;
+            for (unsigned i = 0; i < Attr.getNumArgs() && i < 16; i++) {
+                ArgsBuf.push_back(Attr.getArgAsExpr(i));
+            }
+            D->addAttr(AnnotateAttr::Create(S.Context, static_cast<const char*>(Annotation), ArgsBuf.data(), static_cast<uint32_t>(ArgsBuf.size()), Attr.getRange(), AnnotateAttr::CXX11_clang_annotate));
+        } else {
+            // Attach an annotate attribute to the Decl.
+            D->addAttr(AnnotateAttr::Create(S.Context, static_cast<const char*>(Annotation), nullptr, 0, Attr.getRange(), AnnotateAttr::CXX11_clang_annotate));
+        }
         return AttributeApplied;
     }
 };
@@ -114,9 +124,11 @@ public:
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 
-static clang::ParsedAttrInfoRegistry::Add<ReflectClassAttrInfo<"refl::none", "refl_none">>
+static clang::ParsedAttrInfoRegistry::Add<ReflectClassAttrInfo<"refl_name", "refl_name", 1>>
+    Z0("reflect_attr_name", "create static reflection information");
+static clang::ParsedAttrInfoRegistry::Add<ReflectClassAttrInfo<"refl::none", "refl_none", 0>>
     Z1("reflect_attr_none", "create static reflection information");
-static clang::ParsedAttrInfoRegistry::Add<ReflectClassAttrInfo<"refl::all", "refl_all">>
+static clang::ParsedAttrInfoRegistry::Add<ReflectClassAttrInfo<"refl::all", "refl_all", 0>>
     Z3("reflect_attr_all", "create static reflection information");
 static clang::ParsedAttrInfoRegistry::Add<ReflectMemberAttrInfo<"refl::include", "refl_include", 0>>
     Z4("reflect_attr_include", "create static reflection information");

@@ -8,6 +8,36 @@ enum class [[refl::all]] ScopedEnum {
     eVal3 = 13
 };
 
+#define REFL_CLASS ScopedEnum
+#include <refl/generate.inc>
+
+namespace n1 {
+namespace n2 {
+
+enum [[refl::all]] NamespaceEnum : uint8_t {
+    eVal1,
+    eVal2,
+    eVal3
+};
+
+}
+} // namespace n1
+#define REFL_CLASS n1_n2_NamespaceEnum
+#include <refl/generate.inc>
+
+struct Test {
+    enum [[refl::all]] InnerEnum {
+        eVal1,
+        eVal2
+    };
+};
+#define REFL_CLASS Test_InnerEnum
+#include <refl/generate.inc>
+
+enum class NotReflected {
+    eVal1
+};
+
 TEST_CASE("Reflection of scoped enum is tested", "[scoped_enum]")
 {
     CHECK(refl::e::from_string<ScopedEnum>("eVal1") == ScopedEnum::eVal1);
@@ -59,55 +89,36 @@ TEST_CASE("Reflection of scoped enum is tested", "[scoped_enum]")
     CHECK(called == true);
 }
 
-namespace n1 {
-namespace n2 {
-
-enum [[refl::all]] NamspaceEnum : uint8_t {
-    eVal1,
-    eVal2,
-    eVal3
-};
-
-}
-} // namespace n1
-
 TEST_CASE("Reflection of normal enum in namespaces is tested", "[namespace_enum]")
 {
     namespace n = n1::n2;
-    CHECK(refl::e::from_string<n::NamspaceEnum>("eVal1") == n::eVal1);
+    CHECK(refl::e::from_string<n::NamespaceEnum>("eVal1") == n::eVal1);
 
-    CHECK(refl::e::to_string<n::NamspaceEnum>(n::eVal3) == "eVal3");
+    CHECK(refl::e::to_string<n::NamespaceEnum>(n::eVal3) == "eVal3");
 
-    CHECK(refl::e::to_string_safe<n::NamspaceEnum>(n::eVal2) == "eVal2");
+    CHECK(refl::e::to_string_safe<n::NamespaceEnum>(n::eVal2) == "eVal2");
 
-    CHECK(refl::e::to_string_safe<n::NamspaceEnum>(static_cast<n::NamspaceEnum>(-1)) == "");
+    CHECK(refl::e::to_string_safe<n::NamespaceEnum>(static_cast<n::NamespaceEnum>(-1)) == "");
 
     bool called = false;
-    refl::with<n::NamspaceEnum>([&called]<class E>() {
+    refl::with<n::NamespaceEnum>([&called]<class E>() {
         CHECK(E::reflected == true);
-        CHECK(std::is_same_v<typename E::type, n::NamspaceEnum> == true);
-        CHECK(E::name == "NamspaceEnum");
-        CHECK(E::qualified_name == "n1::n2::NamspaceEnum");
+        CHECK(std::is_same_v<typename E::type, n::NamespaceEnum> == true);
+        CHECK(E::name == "NamespaceEnum");
+        CHECK(E::qualified_name == "n1::n2::NamespaceEnum");
 
-        std::map<std::string_view, n::NamspaceEnum> enums;
+        std::map<std::string_view, n::NamespaceEnum> enums;
         for (auto e : E::enumerators) {
             enums[e.name] = e.value;
         }
         CHECK(enums.size() == 3);
-        CHECK(enums["eVal1"] == n::NamspaceEnum::eVal1);
-        CHECK(enums["eVal2"] == n::NamspaceEnum::eVal2);
-        CHECK(enums["eVal3"] == n::NamspaceEnum::eVal3);
+        CHECK(enums["eVal1"] == n::NamespaceEnum::eVal1);
+        CHECK(enums["eVal2"] == n::NamespaceEnum::eVal2);
+        CHECK(enums["eVal3"] == n::NamespaceEnum::eVal3);
         called = true;
     });
     CHECK(called == true);
 }
-
-struct Test {
-    enum [[refl::all]] InnerEnum {
-        eVal1,
-        eVal2
-    };
-};
 
 TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
 {
@@ -121,10 +132,6 @@ TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
     });
     CHECK(called == true);
 }
-
-enum class NotReflected {
-    eVal1
-};
 
 #include <catch2/matchers/catch_matchers.hpp>
 

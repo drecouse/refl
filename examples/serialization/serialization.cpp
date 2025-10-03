@@ -26,6 +26,8 @@ public:
     // the attribute declaration or the concrete tag can be hidden behind
     // separate macros. C++11 style macros will not work here at the moment.
     __attribute__((refl_tag(skip_ser{}))) long long value3;
+    #define REFL_CLASS Inner
+    #include <refl/generate.inc>
 };
 
 struct [[refl::all]] Example {
@@ -38,6 +40,8 @@ struct [[refl::all]] Example {
     }
     Inner data;
     std::vector<Inner> moreData;
+    #define REFL_CLASS Example
+    #include <refl/generate.inc>
 };
 
 // to differentiate between those types that can be directly printed by our
@@ -74,7 +78,7 @@ struct Serializer<std::vector<T>> {
     }
 };
 
-// this specialization will be applid to every type that is reflected
+// this specialization will be applied to every type that is reflected
 template <typename T>
     requires(refl::reflected<T>)
 struct Serializer<T> {

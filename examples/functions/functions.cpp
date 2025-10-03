@@ -8,6 +8,8 @@ struct [[refl::all]] Example {
     void bar(double d) { std::print("bar called with {}\n", d); }
     Example operator+(Example that) { return Example{i + that.i}; }
     static void baz(bool b) { std::print("baz called with {}\n", b); }
+    #define REFL_CLASS Example
+    #include <refl/generate.inc>
 };
 
 // Base class to build a method call for a member function of T with return type R

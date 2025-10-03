@@ -4,7 +4,7 @@ add_executable(ex_deserialize
     deserialize.cpp)
 set(CLANG_DEFAULT_CXX_STDLIB "libc++")
 
-refl_config(ex_deserialize)
+refl_config_tool(ex_deserialize)
 target_compile_options(ex_deserialize PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:
         -Weverything

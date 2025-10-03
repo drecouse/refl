@@ -23,6 +23,8 @@ struct [[refl::all]] Example {
     {
         std::print("Constructed: {0} {1}\n", a, b);
     }
+#define REFL_CLASS Example
+#include <refl/generate.inc>
 };
 
 int main()

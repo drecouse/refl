@@ -19,7 +19,12 @@ namespace n1 {
 struct [[refl::none]] TestingBasics {
     int val = 42;
 
-    class [[refl::all]] Inner {};
+    class [[refl::all]] Inner {
+#define REFL_CLASS n1_TestingBasics_Inner
+#include <refl/generate.inc>
+    };
+#define REFL_CLASS n1_TestingBasics
+#include <refl/generate.inc>
 };
 
 } // namespace n1
@@ -51,6 +56,8 @@ public:
     {
         return privateMember;
     }
+#define REFL_CLASS Members
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Testing member access", "[members]")
@@ -135,6 +142,8 @@ struct [[refl::all]] Overloads {
     {
         return !b;
     }
+#define REFL_CLASS Overloads
+#include <refl/generate.inc>
 };
 
 #include <set>
@@ -154,6 +163,12 @@ TEST_CASE("Testing overloads", "[overloads]")
 // template classes work
 template <typename T>
 struct [[refl::all]] TemplateTest {
+    // inner template classes also work
+    template <typename T2>
+    class [[refl::all]] InnerTemplate {
+#define REFL_CLASS TemplateTest_T_InnerTemplate_T2
+#include <refl/generate.inc>
+    };
     // template functions are not reflected
     template <typename C>
     void tfunc1()
@@ -181,20 +196,24 @@ struct [[refl::all]] TemplateTest {
     void tfunc3(bool b) { tfunc2<bool>(b); }
 
     void func1(T) {}
+#define REFL_CLASS TemplateTest_T
+#include <refl/generate.inc>
 };
 
 // explicit template instantiation also works
 using TempDouble = TemplateTest<double>;
 
-// specializiation must be again reflected
+// specialization must be again reflected
 template <>
 struct TemplateTest<float> {
     void func2() {}
 };
 
 template <>
-struct [[refl::none]] TemplateTest<bool> {
+struct [[refl::none]] __attribute__((refl_name("TemplateTestSpecBool"))) TemplateTest<bool> {
     void func2() {}
+#define REFL_CLASS TemplateTestSpecBool
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Testing templates", "[template]")
@@ -255,6 +274,13 @@ TEST_CASE("Testing templates", "[template]")
     });
 
     CHECK(reflected == true);
+
+    reflected = false;
+    refl::with<TemplateTest<long long>::InnerTemplate<int>>([&]<typename M>() {
+        reflected = true;
+    });
+    
+    CHECK(reflected == true);
 }
 
 struct [[refl::all]] Constructors {
@@ -270,6 +296,8 @@ struct [[refl::all]] Constructors {
     Constructors(T)
     {
     }
+#define REFL_CLASS Constructors
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Testing constructors", "[constructors]")
@@ -302,6 +330,8 @@ struct [[refl::all]] Statics {
         test = 7;
         return test;
     }
+#define REFL_CLASS Statics
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Testing static variables and functions", "[static]")
@@ -330,11 +360,15 @@ public:
     [[refl::exclude]] int a, b;
     int c;
     [[refl::exclude]] All() = default;
+#define REFL_CLASS All
+#include <refl/generate.inc>
 };
 
 struct [[refl::none]] None {
     [[refl::include]] int a, b;
     int c;
+#define REFL_CLASS None
+#include <refl/generate.inc>
 };
 
 struct Tag {
@@ -349,6 +383,8 @@ struct [[refl::none]] Tags {
     [[refl::include]] bool b;
     __attribute__((refl_tag(Tag{5}))) void foo() {}
     __attribute__((refl_tag(Tag{7}))) __attribute__((refl_tag(refl::cxstring{"seven"}))) Tags() = default;
+#define REFL_CLASS Tags
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Attribute testing", "[attributes]")
@@ -393,6 +429,8 @@ struct [[refl::all]] Operators {
     explicit operator const char*() { return ""; }
     Operators* operator*() { return this; }
     int operator<=>(const Operators&) { return 0; }
+#define REFL_CLASS Operators
+#include <refl/generate.inc>
 };
 
 TEST_CASE("Testing operators", "[operators]")
@@ -427,15 +465,25 @@ TEST_CASE("Testing operators", "[operators]")
 
 struct [[refl::all]] PrivateBase {
     void bar() {}
+#define REFL_CLASS PrivateBase
+#include <refl/generate.inc>
 };
-struct [[refl::all]] ProtectedBase {};
+struct [[refl::all]] ProtectedBase {
+#define REFL_CLASS ProtectedBase
+#include <refl/generate.inc>
+};
 struct [[refl::all]] PublicBase {
     virtual void foo() {}
     virtual void baz() {}
     virtual void notOverriden() {}
     virtual ~PublicBase() = default;
+#define REFL_CLASS PublicBase
+#include <refl/generate.inc>
 };
-struct [[refl::all]] PublicVirtualBase {};
+struct [[refl::all]] PublicVirtualBase {
+#define REFL_CLASS PublicVirtualBase
+#include <refl/generate.inc>
+};
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winconsistent-missing-override"
@@ -449,6 +497,8 @@ struct [[refl::all]] Derived
     void bar() {}
     void foo() override {}
     void baz() {}
+#define REFL_CLASS Derived
+#include <refl/generate.inc>
 };
 
 #pragma clang diagnostic pop
@@ -504,6 +554,8 @@ TEST_CASE("Testing inheritance", "[inheritance]")
 struct [[refl::all]] ParamName {
     void foo(int bar, bool baz) {}
     ParamName(double foo) {}
+#define REFL_CLASS ParamName
+#include <refl/generate.inc>
 };
 
 #pragma clang diagnostic pop
