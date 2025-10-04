@@ -73,6 +73,7 @@ private:
                             if (n == name) { // found the specified parameter
                                 // store the value, we are casting back to the same type
                                 std::get<I>(params) = std::move(*reinterpret_cast<Arg*>(param));
+                                return;
                             }
                         });
                     }
@@ -124,12 +125,12 @@ int main()
     std::string_view parameterName = "j";
     int parameter                  = 42;
 
-    auto method = make_method<&Example::foo>();
+    std::unique_ptr<Method<void, Example>> method = make_method<&Example::foo>();
     method->set_this(ex);
     method->set_param(parameterName, parameter);
     method->call();
 
-    auto method2 = make_method<&Example::operator+ >();
+    std::unique_ptr<Method<Example, Example>> method2 = make_method<&Example::operator+>();
     method2->set_this(ex);
     method2->set_param("that", ex);
     ex = method2->call();

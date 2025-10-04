@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 #include <refl/refl.hpp>
 
 struct NotReflected {
@@ -7,11 +8,7 @@ struct NotReflected {
 
 TEST_CASE("Testing not reflected class", "[not_reflected]")
 {
-    bool enter = false;
-    refl::with<NotReflected>([&enter]<class M>() {
-        enter = true;
-    });
-    CHECK(enter == false);
+    CHECK_THROWS_WITH(refl::with<NotReflected>([]<class M>() {}), "reflection is not available for this type");
 }
 
 namespace n1 {
@@ -261,14 +258,9 @@ TEST_CASE("Testing templates", "[template]")
     CHECK(tfunc2Found == false);
     CHECK(func1Found == true);
 
+    CHECK_THROWS_WITH(refl::with<TemplateTest<float>>([]<class M>() {}), "reflection is not available for this type");
+
     bool reflected = false;
-    refl::with<TemplateTest<float>>([&]() {
-        reflected = true;
-    });
-
-    CHECK(reflected == false);
-
-    reflected = false;
     refl::with<TemplateTest<bool>>([&]<typename M>() {
         reflected = true;
     });

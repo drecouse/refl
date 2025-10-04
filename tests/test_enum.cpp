@@ -137,11 +137,7 @@ TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
 
 TEST_CASE("Not reflected enum is tested", "[not_reflected_enum]")
 {
-    bool called = false;
-    refl::with<NotReflected>([&called]<class E>() {
-        called = true;
-    });
-    CHECK(called == false);
+    CHECK_THROWS_WITH(refl::with<NotReflected>([]<class M>() {}), "reflection is not available for this type");
 
     CHECK_THROWS_WITH(refl::e::for_each<NotReflected>([](auto, auto) {}), "reflection is not available for this enum");
 }
