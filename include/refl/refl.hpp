@@ -6,6 +6,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <array>
 
 // std::get, std::tuple_size, std::tuple_element must be supported
 #ifndef REFL_TUPLE

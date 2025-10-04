@@ -506,7 +506,7 @@ struct [[refl::all]] Derived
 TEST_CASE("Testing inheritance", "[inheritance]")
 {
     std::set<std::string_view> priv, prot, pub; // TODO: C++26 , virt;
-    int nonVirt = 0, virtFunc = 0, allPubFunc = 0, allPrivFunc;
+    int nonVirt = 0, virtFunc = 0, allPubFunc = 0, allPrivFunc = 0;
     refl::with<Derived>([&]<typename M>() {
         refl::for_each_base_class<M>([&]<class B>() {
             refl::with<typename B::type>([&]<class N>() {

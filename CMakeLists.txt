@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 option(REFL_BUILD_EXAMPLES "Build examples" OFF)
 option(REFL_ENABLE_TESTING "Enable testing" OFF)
 
+set(REFL_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
 add_library(refl INTERFACE)
 target_include_directories(refl INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -22,6 +24,22 @@ include(AddClang)
 add_library(refl-plugin MODULE
     src/attribute.cpp
     src/plugin.cpp)
+
+target_include_directories(refl-plugin SYSTEM PRIVATE 
+    ${LLVM_INCLUDE_DIRS}
+    ${CLANG_INCLUDE_DIRS}
+)
+
+clang_target_link_libraries(refl-plugin
+    PRIVATE
+    clangAST
+    clangSema
+    clangASTMatchers
+    clangBasic
+    clangFrontend
+    clangRewrite
+    clangCodeGen
+)
 
 target_compile_options(refl-plugin PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:
@@ -44,11 +62,13 @@ target_compile_options(refl-tool PRIVATE
 clang_target_link_libraries(refl-tool
     PRIVATE
     clangAST
-#    clangASTMatchers
-#    clangBasic
-#    clangFrontend
-#    clangTooling
-#    clangToolingRefactoring
+    clangSema
+    clangTooling
+)
+
+target_include_directories(refl-tool SYSTEM PRIVATE 
+    ${LLVM_INCLUDE_DIRS}
+    ${CLANG_INCLUDE_DIRS}
 )
 
 function(refl_config TARGET)
@@ -73,6 +93,7 @@ function(refl_config TARGET)
 endfunction()
 
 function(refl_config_tool TARGET)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     foreach(INC ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
         list(APPEND REFL_IMPLICIT_INC_DIRS --extra-arg=-I${INC}) 
     endforeach()
@@ -83,7 +104,14 @@ function(refl_config_tool TARGET)
         string(APPEND M ".meta.inc")
         add_custom_command(
             OUTPUT "meta/${M}"
-            COMMAND $<TARGET_FILE:refl-tool> ${CMAKE_CURRENT_SOURCE_DIR}/${S} -base-path ${CMAKE_CURRENT_SOURCE_DIR} -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta --extra-arg=-DREFL_GENERATE --extra-arg=-w ${REFL_IMPLICIT_INC_DIRS}
+            COMMAND $<TARGET_FILE:refl-tool>
+                ${CMAKE_CURRENT_SOURCE_DIR}/${S}
+                -p ${REFL_BINARY_DIR}
+                -base-path ${CMAKE_CURRENT_SOURCE_DIR}
+                -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta
+                --extra-arg=-DREFL_GENERATE
+                --extra-arg=-w 
+                ${REFL_IMPLICIT_INC_DIRS}
             DEPENDS ${S}
         )
         add_custom_target(meta_${M} ALL
