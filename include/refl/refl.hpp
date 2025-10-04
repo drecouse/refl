@@ -195,7 +195,7 @@ constexpr void with(C&& c)
 {
     if constexpr (refl::reflected<T...>) {
         std::forward<C>(c).template operator()<refl::meta<T>...>();
-    } else std::runtime_error{"reflection is not available for this type"};
+    } else throw std::runtime_error{"reflection is not available for this type"};
 }
 
 template <typename T, typename F>
