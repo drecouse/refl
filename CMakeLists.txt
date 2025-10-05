@@ -99,27 +99,28 @@ function(refl_config_tool TARGET)
     endforeach()
     target_link_libraries(${TARGET} PRIVATE refl)
     get_target_property(target_sources ${TARGET} SOURCES)
-    foreach(S ${target_sources})
-        set(M ${S})
-        string(APPEND M ".meta.inc")
+    foreach(SOURCE ${target_sources})
+        set(META_SOURCE ${SOURCE})
+        string(APPEND META_SOURCE ".meta.inc")
         add_custom_command(
-            OUTPUT "meta/${M}"
+            OUTPUT "meta/${META_SOURCE}"
             COMMAND $<TARGET_FILE:refl-tool>
-                ${CMAKE_CURRENT_SOURCE_DIR}/${S}
-                -p ${REFL_BINARY_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+                -p ${CMAKE_BINARY_DIR}
                 -base-path ${CMAKE_CURRENT_SOURCE_DIR}
                 -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta
                 --extra-arg=-DREFL_GENERATE
                 --extra-arg=-w 
                 ${REFL_IMPLICIT_INC_DIRS}
-            DEPENDS ${S}
+            DEPENDS ${SOURCE}
         )
-        add_custom_target(meta_${M} ALL
-              DEPENDS "meta/${M}"
+        string(MAKE_C_IDENTIFIER ${META_SOURCE} META_SOURCE_ID)
+        add_custom_target(meta_${META_SOURCE_ID} ALL
+              DEPENDS "meta/${META_SOURCE}"
         )
-        set_source_files_properties(${S} PROPERTIES
-            OBJECT_DEPENDS "meta_${M}"
-            COMPILE_DEFINITIONS "REFL_META_FILE=\"${CMAKE_CURRENT_BINARY_DIR}/meta/${M}\""
+        set_source_files_properties(${SOURCE} PROPERTIES
+            OBJECT_DEPENDS "meta_${META_SOURCE_ID}"
+            COMPILE_DEFINITIONS "REFL_META_FILE=\"${CMAKE_CURRENT_BINARY_DIR}/meta/${META_SOURCE}\""
         )
     endforeach()
 endfunction()
