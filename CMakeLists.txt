@@ -121,9 +121,10 @@ function(refl_config_tool TARGET)
             DEPFILE ${SOURCE_DEP}
         )
         add_custom_target(meta_${META_SOURCE_ID} ALL
-              DEPENDS ${META_SOURCE}
+            DEPENDS ${META_SOURCE}
         )
         set_source_files_properties(${SOURCE} PROPERTIES
+            OBJECT_DEPENDS "meta_${META_SOURCE_ID}"
             COMPILE_DEFINITIONS "REFL_META_FILE=\"${META_SOURCE}\""
         )
     endforeach()
