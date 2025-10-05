@@ -57,7 +57,7 @@ public:
         ss = "";
     }
     void onEndOfTranslationUnit() override {
-        if (ss != "") {
+        //if (ss != "") {
             auto& sm = _ctx->getSourceManager();
             auto fName = sm.getFileEntryForID(sm.getMainFileID())->tryGetRealPathName();
             auto p = fs::absolute(fs::path{fName.str()});
@@ -67,7 +67,7 @@ public:
             fs::create_directories(m2.remove_filename());
             auto f = std::ofstream{m.string() + ".meta.inc"};
             f << ss << "\n";
-        }
+        //}
     }
     void onTU(ASTContext* ctx) {
         this->_ctx = ctx;
