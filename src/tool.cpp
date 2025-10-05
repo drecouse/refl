@@ -19,6 +19,11 @@
 #include "llvm/Support/FormatVariadic.h"
 #include <filesystem>
 #include <fstream>
+#include "clang/Tooling/DependencyScanning/DependencyScanningService.h"
+#include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
+#include "clang/Tooling/DependencyScanning/DependencyScanningWorker.h"
+#include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/Program.h"
 
 using namespace clang;
 //using namespace clang::tooling;
@@ -552,8 +557,101 @@ static cl::extrahelp CommonHelp(clang::tooling::CommonOptionsParser::HelpMessage
 static cl::OptionCategory ReflToolCategory("refl-tool options");
 static cl::opt<std::string> baseFolder("base-path", cl::desc("The common base path for all files."), cl::cat(ReflToolCategory));
 static cl::opt<std::string> metaFolder("meta-path", cl::desc("The meta folder where the output files will be written."), cl::cat(ReflToolCategory));
+static cl::opt<std::string> CompilationDB("compilation-database", cl::desc("The compilation database."), cl::cat(ReflToolCategory));
+static cl::opt<std::string> dependencyOutput("dependency-output", cl::desc("Where to write makefile dependencies of the specified file."), cl::cat(ReflToolCategory));
 
 #pragma clang diagnostic pop
+
+static std::unique_ptr<tooling::CompilationDatabase>
+getCompilationDatabase(int argc, const char **argv, std::string &ErrorMessage) {
+  if (CompilationDB.empty()) {
+    llvm::errs() << "The compilation command line must be provided either via "
+                    "'-compilation-database'.";
+    return nullptr;
+  }
+
+    return tooling::JSONCompilationDatabase::loadFromFile(
+        CompilationDB, ErrorMessage,
+        tooling::JSONCommandLineSyntax::AutoDetect);
+}
+
+class SharedStream {
+public:
+  SharedStream(raw_ostream &OS) : OS(OS) {}
+  void applyLocked(llvm::function_ref<void(raw_ostream &OS)> Fn) {
+    std::unique_lock<std::mutex> LockGuard(Lock);
+    Fn(OS);
+    OS.flush();
+  }
+
+private:
+  std::mutex Lock;
+  raw_ostream &OS;
+};
+
+class ResourceDirectoryCache {
+public:
+  /// findResourceDir finds the resource directory relative to the clang
+  /// compiler being used in Args, by running it with "-print-resource-dir"
+  /// option and cache the results for reuse. \returns resource directory path
+  /// associated with the given invocation command or empty string if the
+  /// compiler path is NOT an absolute path.
+  StringRef findResourceDir(const tooling::CommandLineArguments &Args,
+                            bool ClangCLMode) {
+    if (Args.size() < 1)
+      return "";
+
+    const std::string &ClangBinaryPath = Args[0];
+    if (!llvm::sys::path::is_absolute(ClangBinaryPath))
+      return "";
+
+    const std::string &ClangBinaryName =
+        std::string(llvm::sys::path::filename(ClangBinaryPath));
+
+    std::unique_lock<std::mutex> LockGuard(CacheLock);
+    const auto &CachedResourceDir = Cache.find(ClangBinaryPath);
+    if (CachedResourceDir != Cache.end())
+      return CachedResourceDir->second;
+
+    std::vector<StringRef> PrintResourceDirArgs{ClangBinaryName};
+    if (ClangCLMode)
+      PrintResourceDirArgs.push_back("/clang:-print-resource-dir");
+    else
+      PrintResourceDirArgs.push_back("-print-resource-dir");
+
+    llvm::SmallString<64> OutputFile, ErrorFile;
+    llvm::sys::fs::createTemporaryFile("print-resource-dir-output",
+                                       "" /*no-suffix*/, OutputFile);
+    llvm::sys::fs::createTemporaryFile("print-resource-dir-error",
+                                       "" /*no-suffix*/, ErrorFile);
+    llvm::FileRemover OutputRemover(OutputFile.c_str());
+    llvm::FileRemover ErrorRemover(ErrorFile.c_str());
+    std::optional<StringRef> Redirects[] = {
+        {""}, // Stdin
+        OutputFile.str(),
+        ErrorFile.str(),
+    };
+    if (llvm::sys::ExecuteAndWait(ClangBinaryPath, PrintResourceDirArgs, {},
+                                  Redirects)) {
+      auto ErrorBuf =
+          llvm::MemoryBuffer::getFile(ErrorFile.c_str(), /*IsText=*/true);
+      llvm::errs() << ErrorBuf.get()->getBuffer();
+      return "";
+    }
+
+    auto OutputBuf =
+        llvm::MemoryBuffer::getFile(OutputFile.c_str(), /*IsText=*/true);
+    if (!OutputBuf)
+      return "";
+    StringRef Output = OutputBuf.get()->getBuffer().rtrim('\n');
+
+    return Cache[ClangBinaryPath] = Output.str();
+  }
+
+private:
+  std::map<std::string, std::string> Cache;
+  std::mutex CacheLock;
+};
 
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
@@ -563,6 +661,120 @@ int main(int argc, const char **argv) {
     llvm::errs() << ExpectedParser.takeError();
     return 1;
   }
+
+    using namespace clang::tooling::dependencies;
+std::string ErrorMessage;
+std::unique_ptr<tooling::CompilationDatabase> Compilations =
+      getCompilationDatabase(argc, argv, ErrorMessage);
+  if (!Compilations) {
+    llvm::errs() << ErrorMessage << "\n";
+    return 1;
+  }
+
+    if (dependencyOutput.getValue() == "") {
+    llvm::errs() << "-dependency-output is mandatory"<< "\n";
+    return 1;
+
+    }
+
+  // Expand response files in advance, so that we can "see" all the arguments
+  // when adjusting below.
+  Compilations = expandResponseFiles(std::move(Compilations),
+                                     llvm::vfs::getRealFileSystem());
+
+  Compilations = inferTargetAndDriverMode(std::move(Compilations));
+
+  Compilations = inferToolLocation(std::move(Compilations));
+
+  // The command options are rewritten to run Clang in preprocessor only mode.
+  auto AdjustingCompilations =
+      std::make_unique<tooling::ArgumentsAdjustingCompilations>(
+          std::move(Compilations));
+  ResourceDirectoryCache ResourceDirCache;
+
+  AdjustingCompilations->appendArgumentsAdjuster(
+      [&ResourceDirCache](const tooling::CommandLineArguments &Args,
+                          StringRef FileName) {
+        std::string LastO;
+        bool HasResourceDir = false;
+        bool ClangCLMode = false;
+        auto FlagsEnd = llvm::find(Args, "--");
+        if (FlagsEnd != Args.begin()) {
+          ClangCLMode =
+              llvm::sys::path::stem(Args[0]).contains_insensitive("clang-cl") ||
+              llvm::is_contained(Args, "--driver-mode=cl");
+
+          // Reverse scan, starting at the end or at the element before "--".
+          auto R = std::make_reverse_iterator(FlagsEnd);
+          auto E = Args.rend();
+          // Don't include Args[0] in the iteration; that's the executable, not
+          // an option.
+          if (E != R)
+            E--;
+          for (auto I = R; I != E; ++I) {
+            StringRef Arg = *I;
+            if (ClangCLMode) {
+              // Ignore arguments that are preceded by "-Xclang".
+              if ((I + 1) != E && I[1] == "-Xclang")
+                continue;
+              if (LastO.empty()) {
+                // With clang-cl, the output obj file can be specified with
+                // "/opath", "/o path", "/Fopath", and the dash counterparts.
+                // Also, clang-cl adds ".obj" extension if none is found.
+                if ((Arg == "-o" || Arg == "/o") && I != R)
+                  LastO = I[-1]; // Next argument (reverse iterator)
+                else if (Arg.starts_with("/Fo") || Arg.starts_with("-Fo"))
+                  LastO = Arg.drop_front(3).str();
+                else if (Arg.starts_with("/o") || Arg.starts_with("-o"))
+                  LastO = Arg.drop_front(2).str();
+
+                if (!LastO.empty() && !llvm::sys::path::has_extension(LastO))
+                  LastO.append(".obj");
+              }
+            }
+            if (Arg == "-resource-dir")
+              HasResourceDir = true;
+          }
+        }
+        tooling::CommandLineArguments AdjustedArgs(Args.begin(), FlagsEnd);
+        // The clang-cl driver passes "-o -" to the frontend. Inject the real
+        // file here to ensure "-MT" can be deduced if need be.
+        if (ClangCLMode && !LastO.empty()) {
+          AdjustedArgs.push_back("/clang:-o");
+          AdjustedArgs.push_back("/clang:" + LastO);
+        }
+
+        /*if (!HasResourceDir && ResourceDirRecipe == RDRK_InvokeCompiler) {
+          StringRef ResourceDir =
+              ResourceDirCache.findResourceDir(Args, ClangCLMode);
+          if (!ResourceDir.empty()) {
+            AdjustedArgs.push_back("-resource-dir");
+            AdjustedArgs.push_back(std::string(ResourceDir));
+          }
+        }*/
+        AdjustedArgs.insert(AdjustedArgs.end(), FlagsEnd, Args.end());
+        return AdjustedArgs;
+      });
+
+  std::vector<tooling::CompileCommand> Inputs =
+      AdjustingCompilations->getAllCompileCommands();
+
+  DependencyScanningService Service(ScanningMode::DependencyDirectivesScan, ScanningOutputFormat::Make, ScanningOptimizations::Default);
+    DependencyScanningTool WorkerTool(Service);
+    for (auto& it : Inputs) {
+        if (it.Filename == argv[1]) {
+            auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);
+            auto p = fs::absolute(fs::path{dependencyOutput.getValue()});
+            auto fn = p;
+            fn.remove_filename();
+            fs::create_directories(fn);
+            auto f = std::ofstream{p};
+            f << *res << "\n";
+            break;
+        }
+    }
+
+
 
     if (baseFolder.getValue() == "" || metaFolder == "") {
         llvm::errs() << "Both base_path and meta_path arguments are required.\n";

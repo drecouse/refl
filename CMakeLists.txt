@@ -103,6 +103,7 @@ function(refl_config_tool TARGET)
         set(META_SOURCE ${SOURCE})
         string(APPEND META_SOURCE ".meta.inc")
         string(MAKE_C_IDENTIFIER ${META_SOURCE} META_SOURCE_ID)
+        set(SOURCE_DEP "${CMAKE_CURRENT_BINARY_DIR}/depfiles/${SOURCE}.d")
         set(META_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/meta/${META_SOURCE}")
         add_custom_command(
             OUTPUT ${META_SOURCE}
@@ -112,15 +113,17 @@ function(refl_config_tool TARGET)
                 -base-path ${CMAKE_CURRENT_SOURCE_DIR}
                 -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta
                 --extra-arg=-DREFL_GENERATE
-                --extra-arg=-w 
+                --extra-arg=-w
+                -compilation-database=${CMAKE_BINARY_DIR}/compile_commands.json
+                -dependency-output=${SOURCE_DEP}
                 ${REFL_IMPLICIT_INC_DIRS}
             DEPENDS ${SOURCE}
+            DEPFILE ${SOURCE_DEP}
         )
         add_custom_target(meta_${META_SOURCE_ID} ALL
               DEPENDS ${META_SOURCE}
         )
         set_source_files_properties(${SOURCE} PROPERTIES
-            OBJECT_DEPENDS "meta_${META_SOURCE_ID}"
             COMPILE_DEFINITIONS "REFL_META_FILE=\"${META_SOURCE}\""
         )
     endforeach()
