@@ -64,6 +64,7 @@ clang_target_link_libraries(refl-tool
     clangAST
     clangSema
     clangTooling
+    clangDependencyScanning
 )
 
 target_include_directories(refl-tool SYSTEM PRIVATE 
