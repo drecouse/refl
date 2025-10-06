@@ -765,6 +765,11 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
         if (it.Filename == argv[1]) {
             it.CommandLine.push_back("-DREFL_GENERATE");
             auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);
+            if (auto E = res.takeError()) {
+                auto str = toString(std::move(E));
+                if (str != "") llvm::errs() << "Error happened during dependency generation: " << str << "\n";
+                break;
+            }
             auto p = fs::absolute(fs::path{dependencyOutput.getValue()});
             auto fn = p;
             fn.remove_filename();

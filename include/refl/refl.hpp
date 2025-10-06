@@ -13,6 +13,8 @@
     #define REFL_TUPLE std::tuple
 #endif
 
+#define REFL_ACCESS template<typename> friend struct refl::meta;
+
 // include generated meta defines, REFL_META_FILE is defined to be the meta file for the currently compiled source file
 #if !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
 #include REFL_META_FILE

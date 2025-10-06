@@ -25,15 +25,6 @@ enum [[refl::all]] NamespaceEnum : uint8_t {
 #define REFL_CLASS n1_n2_NamespaceEnum
 #include <refl/generate.inc>
 
-struct Test {
-    enum [[refl::all]] InnerEnum {
-        eVal1,
-        eVal2
-    };
-};
-#define REFL_CLASS Test_InnerEnum
-#include <refl/generate.inc>
-
 enum class NotReflected {
     eVal1
 };
@@ -120,8 +111,20 @@ TEST_CASE("Reflection of normal enum in namespaces is tested", "[namespace_enum]
     CHECK(called == true);
 }
 
-TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
-{
+class Test {
+    enum [[refl::all]] InnerEnum {
+        eVal1,
+        eVal2
+    };
+    REFL_ACCESS
+
+public:
+    static bool test();
+};
+#define REFL_CLASS Test_InnerEnum
+#include <refl/generate.inc>
+    
+bool Test::test() {
     bool called = false;
     refl::with<Test::InnerEnum>([&called]<class E>() {
         CHECK(E::reflected == true);
@@ -130,7 +133,12 @@ TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
         CHECK(E::qualified_name == "Test::InnerEnum");
         called = true;
     });
-    CHECK(called == true);
+    return called;
+}
+
+TEST_CASE("Reflection of enum inside class is tested", "[inner_enum]")
+{
+    CHECK(Test::test() == true);
 }
 
 #include <catch2/matchers/catch_matchers.hpp>
