@@ -46,13 +46,18 @@ The difference between the plugin and the tool is that with the plugin, the macr
 - Direct access to the underlying meta information (`refl::meta<T>`) should be avoided as the compiler (and the language server) will see these as errors even when the plugin is in use.
 - Warnings in normal code paths will be issued twice.
 - The plugin version is only supported on Linux. On Windows the tool version can be used instead.
+- The tool version uses macros to insert the reflection code into the class. This requires unique macro names. By default these are generated from the qualified name of the type but with template specializations collisions can occur. In this case the refl_name attribute must be used on the type to specify a unique name: `__attribute__((refl_name("UniqueName")))`.
 
 ## Usage
 The plugin must be applied during compilation with the `-fplugin=refl-plugin` switch. The header file must be included before any usage of the library (even before using the attributes).
+The tool generates ***.meta files for each compilation unit that must be included during compilation. This is semi-automated using the `refl/generate.inc` file. See the examples for exact usage.
 
-If the project is included as a CMake subdirectory then the provided `refl_config(TARGET)` (or `refl_config_tool(TARGET)` function can be used to configure a target. It applies the plugin and sets it up as a dependency for compilation.
+If the project is included as a CMake subdirectory then the provided `refl_config(TARGET)` (or `refl_config_tool(TARGET)` function can be used to configure a target. It applies the plugin or tool and sets it up as a dependency for compilation.
+Note that when the tool is used then compile command must be generated in the root build directory. With CMake you can use the `set(CMAKE_EXPORT_COMPILE_COMMANDS ON)` directive in each project that uses the library.
 
 ```CMake
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(FetchContent)
 FetchContent_Declare(
   refl
@@ -65,7 +70,7 @@ refl_config(MY_TARGET)
 #refl_config_tool(MY_TARGET)
 ```
 
-The LLVM development libraries must be installed to build the library.
+The LLVM development libraries must be installed to build the library. Currently 21.1.0 is tested to work. Older versions are not supported.
 
 ## Examples
 Multiple small examples are provided to showcase the capabilities of the library. In increasing order of complexity:

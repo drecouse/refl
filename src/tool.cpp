@@ -563,7 +563,7 @@ static cl::opt<std::string> dependencyOutput("dependency-output", cl::desc("Wher
 #pragma clang diagnostic pop
 
 static std::unique_ptr<tooling::CompilationDatabase>
-getCompilationDatabase(int argc, const char **argv, std::string &ErrorMessage) {
+getCompilationDatabase(std::string &ErrorMessage) {
   if (CompilationDB.empty()) {
     llvm::errs() << "The compilation command line must be provided either via "
                     "'-compilation-database'.";
@@ -665,7 +665,7 @@ int main(int argc, const char **argv) {
     using namespace clang::tooling::dependencies;
 std::string ErrorMessage;
 std::unique_ptr<tooling::CompilationDatabase> Compilations =
-      getCompilationDatabase(argc, argv, ErrorMessage);
+      getCompilationDatabase(ErrorMessage);
   if (!Compilations) {
     llvm::errs() << ErrorMessage << "\n";
     return 1;
@@ -690,13 +690,11 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   auto AdjustingCompilations =
       std::make_unique<tooling::ArgumentsAdjustingCompilations>(
           std::move(Compilations));
-  ResourceDirectoryCache ResourceDirCache;
 
   AdjustingCompilations->appendArgumentsAdjuster(
-      [&ResourceDirCache](const tooling::CommandLineArguments &Args,
-                          StringRef FileName) {
+      [](const tooling::CommandLineArguments &Args,
+                          StringRef _ /*FileName*/) {
         std::string LastO;
-        bool HasResourceDir = false;
         bool ClangCLMode = false;
         auto FlagsEnd = llvm::find(Args, "--");
         if (FlagsEnd != Args.begin()) {
@@ -732,8 +730,6 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
                   LastO.append(".obj");
               }
             }
-            if (Arg == "-resource-dir")
-              HasResourceDir = true;
           }
         }
         tooling::CommandLineArguments AdjustedArgs(Args.begin(), FlagsEnd);
@@ -744,14 +740,6 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
           AdjustedArgs.push_back("/clang:" + LastO);
         }
 
-        /*if (!HasResourceDir && ResourceDirRecipe == RDRK_InvokeCompiler) {
-          StringRef ResourceDir =
-              ResourceDirCache.findResourceDir(Args, ClangCLMode);
-          if (!ResourceDir.empty()) {
-            AdjustedArgs.push_back("-resource-dir");
-            AdjustedArgs.push_back(std::string(ResourceDir));
-          }
-        }*/
         AdjustedArgs.insert(AdjustedArgs.end(), FlagsEnd, Args.end());
         return AdjustedArgs;
       });

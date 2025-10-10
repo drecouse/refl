@@ -58,6 +58,14 @@ TEST_CASE("Reflection of scoped enum is tested", "[scoped_enum]")
         CHECK(enums["eVal1"] == ScopedEnum::eVal1);
         CHECK(enums["eVal2"] == ScopedEnum::eVal2);
         CHECK(enums["eVal3"] == ScopedEnum::eVal3);
+
+        enums.clear();
+
+        size_t sum = 0; // 0, 1, 2
+        refl::e::for_each_indexed<ScopedEnum>([&](auto i, auto, auto) {
+            sum += i;
+        });
+        CHECK(sum == 3);
     }
 
     bool called = false;
@@ -116,7 +124,7 @@ class Test {
         eVal1,
         eVal2
     };
-    REFL_ACCESS
+    REFL_ACCESS();
 
 public:
     static bool test();

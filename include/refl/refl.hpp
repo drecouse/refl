@@ -13,7 +13,7 @@
     #define REFL_TUPLE std::tuple
 #endif
 
-#define REFL_ACCESS template<typename> friend struct refl::meta;
+#define REFL_ACCESS() template<typename> friend struct refl::meta
 
 // include generated meta defines, REFL_META_FILE is defined to be the meta file for the currently compiled source file
 #if !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
@@ -355,6 +355,16 @@ void for_each(F&& func)
 {
     if constexpr (reflected<T>) {
         for (const auto& it : meta<T>::enumerators) { func(it.value, it.name); }
+    } else throw std::runtime_error{"reflection is not available for this enum"};
+}
+
+template <detail::c_enum T, typename F>
+    requires std::invocable<F, size_t, T, std::string_view>
+void for_each_indexed(F&& func)
+{
+    if constexpr (reflected<T>) {
+        size_t i = 0;
+        for (const auto& it : meta<T>::enumerators) { func(i++, it.value, it.name); }
     } else throw std::runtime_error{"reflection is not available for this enum"};
 }
 
