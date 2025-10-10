@@ -93,44 +93,52 @@ function(refl_config TARGET)
     endif()
 endfunction()
 
-function(refl_config_tool TARGET)
-    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-    if (UNIX) 
+function(refl_config_source SOURCE)
+    set(REFL_IMPLICIT_INC_DIRS "")
+    if (UNIX)
         foreach(INC ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
             list(APPEND REFL_IMPLICIT_INC_DIRS --extra-arg=-I${INC}) 
         endforeach()
-    endif (UNIX)
-    target_link_libraries(${TARGET} PRIVATE refl)
-    get_target_property(target_sources ${TARGET} SOURCES)
-    foreach(SOURCE ${target_sources})
-        set(META_SOURCE ${SOURCE})
-        string(APPEND META_SOURCE ".meta.inc")
-        string(MAKE_C_IDENTIFIER ${META_SOURCE} META_SOURCE_ID)
-        set(SOURCE_DEP "${CMAKE_CURRENT_BINARY_DIR}/depfiles/${SOURCE}.d")
-        set(META_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/meta/${META_SOURCE}")
-        add_custom_command(
-            OUTPUT ${META_SOURCE}
-            COMMAND $<TARGET_FILE:refl-tool>
-                ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
-                -p ${CMAKE_BINARY_DIR}
-                -base-path ${CMAKE_CURRENT_SOURCE_DIR}
-                -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta
-                --extra-arg=-DREFL_GENERATE
-                --extra-arg=-w
-                -compilation-database=${CMAKE_BINARY_DIR}/compile_commands.json
-                -dependency-output=${SOURCE_DEP}
-                ${REFL_IMPLICIT_INC_DIRS}
-            DEPENDS ${SOURCE}
-            DEPFILE ${SOURCE_DEP}
-        )
-        add_custom_target(meta_${META_SOURCE_ID} ALL
-            DEPENDS ${META_SOURCE}
-        )
-        set_source_files_properties(${SOURCE} PROPERTIES
-            OBJECT_DEPENDS "meta_${META_SOURCE_ID}"
-            COMPILE_DEFINITIONS "REFL_META_FILE=\"${META_SOURCE}\""
-        )
+    endif()
+    set(META_SOURCE ${SOURCE})
+    string(APPEND META_SOURCE ".meta.inc")
+    string(MAKE_C_IDENTIFIER ${META_SOURCE} META_SOURCE_ID)
+    set(SOURCE_DEP "${CMAKE_CURRENT_BINARY_DIR}/depfiles/${SOURCE}.d")
+    set(META_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/meta/${META_SOURCE}")
+    add_custom_command(
+        OUTPUT ${META_SOURCE}
+        COMMAND $<TARGET_FILE:refl-tool>
+            ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+            -p ${CMAKE_BINARY_DIR}
+            -base-path ${CMAKE_CURRENT_SOURCE_DIR}
+            -meta-path ${CMAKE_CURRENT_BINARY_DIR}/meta
+            --extra-arg=-DREFL_GENERATE
+            --extra-arg=-w
+            -compilation-database=${CMAKE_BINARY_DIR}/compile_commands.json
+            -dependency-output=${SOURCE_DEP}
+            ${REFL_IMPLICIT_INC_DIRS}
+        DEPENDS ${SOURCE}
+        DEPFILE ${SOURCE_DEP}
+    )
+    add_custom_target(meta_${META_SOURCE_ID} ALL
+        DEPENDS ${META_SOURCE}
+    )
+    set_source_files_properties(${SOURCE} PROPERTIES
+        OBJECT_DEPENDS "meta_${META_SOURCE_ID}"
+        COMPILE_DEFINITIONS "REFL_META_FILE=\"${META_SOURCE}\""
+    )
+endfunction()
+
+function(refl_config_sources SOURCE_FILES)
+    foreach(SOURCE_FILE ${SOURCE_FILES})
+        refl_config_source(${SOURCE_FILE})
     endforeach()
+endfunction()
+
+function(refl_config_tool TARGET)
+    target_link_libraries(${TARGET} PRIVATE refl)
+    get_target_property(TARGET_SOURCES ${TARGET} SOURCES)
+    refl_config_sources("${TARGET_SOURCES}")
 endfunction()
 
 if (REFL_ENABLE_TESTING)
