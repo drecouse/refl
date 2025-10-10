@@ -325,10 +325,21 @@ concept c_enum = std::is_enum_v<T>;
 
 }
 
+template <typename T>
+concept enum_serializer = requires() {
+    { T::serializations[0] } -> std::same_as<const std::string_view&>;
+};
+
 template <detail::c_enum T>
 std::optional<T> from_string(std::string_view name)
 {
     if constexpr (reflected<T>) return meta<T>::from_string(name);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
+template <detail::c_enum T, enum_serializer S>
+std::optional<T> from_string(std::string_view name)
+{
+    if constexpr (reflected<T>) return meta<T>::template from_string<S>(name);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
 template <detail::c_enum T>
@@ -337,10 +348,22 @@ std::string_view to_string(T value)
     if constexpr (reflected<T>) return meta<T>::to_string(value);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
+template <enum_serializer S, detail::c_enum T>
+std::string_view to_string(T value)
+{
+    if constexpr (reflected<T>) return meta<T>::template to_string<S>(value);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
 template <detail::c_enum T>
 std::string_view to_string_safe(T value)
 {
     if constexpr (reflected<T>) return meta<T>::to_string_safe(value);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
+template <enum_serializer S, detail::c_enum T>
+std::string_view to_string_safe(T value)
+{
+    if constexpr (reflected<T>) return meta<T>::template to_string_safe<S>(value);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
 template <detail::c_enum T>
