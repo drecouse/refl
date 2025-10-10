@@ -781,7 +781,7 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   DependencyScanningService Service(ScanningMode::DependencyDirectivesScan, ScanningOutputFormat::Make, ScanningOptimizations::Default);
     DependencyScanningTool WorkerTool(Service);
     for (auto& it : Inputs) {
-        if (it.Filename == argv[1]) {
+        if (fs::equivalent(it.Filename, argv[1])) {
             it.CommandLine.push_back("-DREFL_GENERATE");
             auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);
             if (auto E = res.takeError()) {
