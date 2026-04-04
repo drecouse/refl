@@ -563,7 +563,7 @@ static cl::opt<std::string> dependencyOutput("dependency-output", cl::desc("Wher
 #pragma clang diagnostic pop
 
 static std::unique_ptr<tooling::CompilationDatabase>
-getCompilationDatabase(int argc, const char **argv, std::string &ErrorMessage) {
+getCompilationDatabase(int /* argc */, const char ** /* argv */, std::string &ErrorMessage) {
   if (CompilationDB.empty()) {
     llvm::errs() << "The compilation command line must be provided either via "
                     "'-compilation-database'.";
@@ -690,13 +690,13 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   auto AdjustingCompilations =
       std::make_unique<tooling::ArgumentsAdjustingCompilations>(
           std::move(Compilations));
-  ResourceDirectoryCache ResourceDirCache;
+  //ResourceDirectoryCache ResourceDirCache;
 
   AdjustingCompilations->appendArgumentsAdjuster(
-      [&ResourceDirCache](const tooling::CommandLineArguments &Args,
-                          StringRef FileName) {
+      [/*&ResourceDirCache*/](const tooling::CommandLineArguments &Args,
+                          StringRef/* FileName*/) {
         std::string LastO;
-        bool HasResourceDir = false;
+        //bool HasResourceDir = false;
         bool ClangCLMode = false;
         auto FlagsEnd = llvm::find(Args, "--");
         if (FlagsEnd != Args.begin()) {
@@ -732,8 +732,8 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
                   LastO.append(".obj");
               }
             }
-            if (Arg == "-resource-dir")
-              HasResourceDir = true;
+            //if (Arg == "-resource-dir")
+              //HasResourceDir = true;
           }
         }
         tooling::CommandLineArguments AdjustedArgs(Args.begin(), FlagsEnd);
@@ -762,7 +762,10 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   DependencyScanningService Service(ScanningMode::DependencyDirectivesScan, ScanningOutputFormat::Make, ScanningOptimizations::Default);
     DependencyScanningTool WorkerTool(Service);
     for (auto& it : Inputs) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
         if (it.Filename == argv[1]) {
+#pragma clang diagnostic pop
             it.CommandLine.push_back("-DREFL_GENERATE");
             auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);
             if (auto E = res.takeError()) {

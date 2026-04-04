@@ -16,7 +16,7 @@ add_executable(tests
     test_class.cpp
     test_enum.cpp)
 
-refl_config_tool(tests)
+refl_config(tests)
 target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 target_compile_options(tests PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>>:

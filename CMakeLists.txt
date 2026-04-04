@@ -71,6 +71,14 @@ target_include_directories(refl-tool SYSTEM PRIVATE
     ${CLANG_INCLUDE_DIRS}
 )
 
+if(NOT PROJECT_IS_TOP_LEVEL)
+    set(REFL_RELEASE_COMPILE_OPTIONS -g0 -O3 -w -ffast-math -flto=full  -fstrict-vtable-pointers -fwhole-program-vtables)
+    target_compile_options(refl-tool PRIVATE ${REFL_RELEASE_COMPILE_OPTIONS})
+    target_compile_options(refl-plugin PRIVATE ${REFL_RELEASE_COMPILE_OPTIONS})
+    target_link_options(refl-tool PRIVATE -fuse-ld=lld)
+    target_link_options(refl-plugin PRIVATE -fuse-ld=lld)
+endif()
+
 function(refl_config TARGET)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         target_compile_options(${TARGET} PRIVATE

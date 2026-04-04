@@ -1,4 +1,4 @@
-#if !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
+#if defined REFL_CLASS && !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
 #define REFL_CONC(arg) REFLG_ ## arg
 #define REFL_PASS(arg) REFL_CONC(arg)
 REFL_PASS(REFL_CLASS)

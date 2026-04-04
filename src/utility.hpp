@@ -64,6 +64,8 @@ static ReflSpec getReflSpec(const Decl* decl, const SourceManager& SourceManager
     return ReflSpec::unknown;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 static std::string getReflMacroName(const Decl* decl, const SourceManager& SourceManager, ASTContext& Context_)
 {
     std::string ret;
@@ -84,6 +86,7 @@ static std::string getReflMacroName(const Decl* decl, const SourceManager& Sourc
     }
     return ret;
 }
+#pragma clang diagnostic pop
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wweak-vtables"
