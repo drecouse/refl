@@ -434,31 +434,62 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
         ss += formatv(
             "};static constexpr bool valid({0} v)noexcept{{for(const "
             "auto&e:enumerators)if(e.value==v)return true;return "
-            "false;}static constexpr std::string_view to_string({0} "
+            "false;}template<refl::e::enum_serializer S>static constexpr std::string_view to_string({0} "
             "v)noexcept{{switch(v){{",
             qname
         );
 
+        int i = 0;
         for (const auto e : enumDecl->enumerators()) {
             const auto& n = e->getName();
-            ss += formatv("case {0}::{1}:return\"{1}\";", qname, n);
+            ss += formatv("case {0}::{1}:return S::serializations[{2}];", qname, n, i++);
+        }
+
+        ss += formatv(
+            "default:{{assert(false);__builtin_unreachable();}}}"
+            "static constexpr std::string_view to_string({0} "
+            "v)noexcept{{switch(v){{",
+            qname
+        );
+
+        i = 0;
+        for (const auto e : enumDecl->enumerators()) {
+            const auto& n = e->getName();
+            ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
         }
 
         ss += formatv("default:{{assert(false);__builtin_unreachable();}}}"
                       "static constexpr std::string_view "
                       "to_string_safe({0} v)noexcept{{switch(v){{",
                       qname);
-
+        i = 0;
         for (const auto e : enumDecl->enumerators()) {
             const auto& n = e->getName();
-            ss += formatv("case {0}::{1}:return\"{1}\";", qname, n);
+            ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
+        }
+
+        ss += formatv(
+            "default:return{{};}}template <refl::e::enum_serializer S>static constexpr std::string_view "
+            "to_string_safe({0} v)noexcept{{switch(v){{",
+            qname
+        );
+
+        i = 0;
+        for (const auto e : enumDecl->enumerators()) {
+            const auto& n = e->getName();
+            ss += formatv("case {0}::{1}:return S::serializations[{2}];", qname, n, i++);
         }
 
         ss += formatv(
             "default:return{{};}}static constexpr "
             "std::optional<{0}>from_string(std::string_view "
             "n)noexcept{{for(const auto&e:enumerators)if(e.name==n)return "
-            "e.value;return std::nullopt;}};",
+            "e.value;return std::nullopt;}"
+            "template<refl::e::enum_serializer S> static constexpr "
+            "std::optional<{0}>from_string(std::string_view "
+            "n)noexcept{{size_t i = 0;for(const auto&e:S::serializations){{"
+            "if(e==n)return enumerators[i].value;i++;}return std::nullopt;}"
+            "};",
             qname
         );
 

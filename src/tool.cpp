@@ -518,31 +518,62 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
         ss += formatv(
             "};static constexpr bool valid({0} v)noexcept{{for(const "
             "auto&e:enumerators)if(e.value==v)return true;return "
-            "false;}static constexpr std::string_view to_string({0} "
+            "false;}template<refl::e::enum_serializer S>static constexpr std::string_view to_string({0} "
             "v)noexcept{{switch(v){{",
             qname
         );
 
+        int i = 0;
         for (const auto e : enumDecl->enumerators()) {
             const auto& n = e->getName();
-            ss += formatv("case {0}::{1}:return\"{1}\";", qname, n);
+            ss += formatv("case {0}::{1}:return S::serializations[{2}];", qname, n, i++);
+        }
+
+        ss += formatv(
+            "default:{{assert(false);__builtin_unreachable();}}}"
+            "static constexpr std::string_view to_string({0} "
+            "v)noexcept{{switch(v){{",
+            qname
+        );
+
+        i = 0;
+        for (const auto e : enumDecl->enumerators()) {
+            const auto& n = e->getName();
+            ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
         }
 
         ss += formatv("default:{{assert(false);__builtin_unreachable();}}}"
                       "static constexpr std::string_view "
                       "to_string_safe({0} v)noexcept{{switch(v){{",
                       qname);
-
+        i = 0;
         for (const auto e : enumDecl->enumerators()) {
             const auto& n = e->getName();
-            ss += formatv("case {0}::{1}:return\"{1}\";", qname, n);
+            ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
+        }
+
+        ss += formatv(
+            "default:return{{};}}template <refl::e::enum_serializer S>static constexpr std::string_view "
+            "to_string_safe({0} v)noexcept{{switch(v){{",
+            qname
+        );
+
+        i = 0;
+        for (const auto e : enumDecl->enumerators()) {
+            const auto& n = e->getName();
+            ss += formatv("case {0}::{1}:return S::serializations[{2}];", qname, n, i++);
         }
 
         ss += formatv(
             "default:return{{};}}static constexpr "
             "std::optional<{0}>from_string(std::string_view "
             "n)noexcept{{for(const auto&e:enumerators)if(e.name==n)return "
-            "e.value;return std::nullopt;}};\n",
+            "e.value;return std::nullopt;}"
+            "template<refl::e::enum_serializer S> static constexpr "
+            "std::optional<{0}>from_string(std::string_view "
+            "n)noexcept{{size_t i = 0;for(const auto&e:S::serializations){{"
+            "if(e==n)return enumerators[i].value;i++;}return std::nullopt;}"
+            "};\n",
             qname
         );
     }
@@ -563,7 +594,7 @@ static cl::opt<std::string> dependencyOutput("dependency-output", cl::desc("Wher
 #pragma clang diagnostic pop
 
 static std::unique_ptr<tooling::CompilationDatabase>
-getCompilationDatabase(int /* argc */, const char ** /* argv */, std::string &ErrorMessage) {
+getCompilationDatabase(std::string &ErrorMessage) {
   if (CompilationDB.empty()) {
     llvm::errs() << "The compilation command line must be provided either via "
                     "'-compilation-database'.";
@@ -665,7 +696,7 @@ int main(int argc, const char **argv) {
     using namespace clang::tooling::dependencies;
 std::string ErrorMessage;
 std::unique_ptr<tooling::CompilationDatabase> Compilations =
-      getCompilationDatabase(argc, argv, ErrorMessage);
+      getCompilationDatabase(ErrorMessage);
   if (!Compilations) {
     llvm::errs() << ErrorMessage << "\n";
     return 1;
@@ -690,13 +721,10 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   auto AdjustingCompilations =
       std::make_unique<tooling::ArgumentsAdjustingCompilations>(
           std::move(Compilations));
-  //ResourceDirectoryCache ResourceDirCache;
-
   AdjustingCompilations->appendArgumentsAdjuster(
-      [/*&ResourceDirCache*/](const tooling::CommandLineArguments &Args,
-                          StringRef/* FileName*/) {
+      [](const tooling::CommandLineArguments &Args,
+                          StringRef _ /*FileName*/) {
         std::string LastO;
-        //bool HasResourceDir = false;
         bool ClangCLMode = false;
         auto FlagsEnd = llvm::find(Args, "--");
         if (FlagsEnd != Args.begin()) {
@@ -732,8 +760,6 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
                   LastO.append(".obj");
               }
             }
-            //if (Arg == "-resource-dir")
-              //HasResourceDir = true;
           }
         }
         tooling::CommandLineArguments AdjustedArgs(Args.begin(), FlagsEnd);
@@ -744,14 +770,6 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
           AdjustedArgs.push_back("/clang:" + LastO);
         }
 
-        /*if (!HasResourceDir && ResourceDirRecipe == RDRK_InvokeCompiler) {
-          StringRef ResourceDir =
-              ResourceDirCache.findResourceDir(Args, ClangCLMode);
-          if (!ResourceDir.empty()) {
-            AdjustedArgs.push_back("-resource-dir");
-            AdjustedArgs.push_back(std::string(ResourceDir));
-          }
-        }*/
         AdjustedArgs.insert(AdjustedArgs.end(), FlagsEnd, Args.end());
         return AdjustedArgs;
       });
@@ -764,7 +782,7 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
     for (auto& it : Inputs) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-        if (it.Filename == argv[1]) {
+        if (fs::equivalent(it.Filename, argv[1])) {
 #pragma clang diagnostic pop
             it.CommandLine.push_back("-DREFL_GENERATE");
             auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);

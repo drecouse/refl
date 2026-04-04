@@ -13,7 +13,7 @@
     #define REFL_TUPLE std::tuple
 #endif
 
-#define REFL_ACCESS template<typename> friend struct refl::meta;
+#define REFL_ACCESS() template<typename> friend struct refl::meta
 
 // include generated meta defines, REFL_META_FILE is defined to be the meta file for the currently compiled source file
 #if !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
@@ -325,10 +325,21 @@ concept c_enum = std::is_enum_v<T>;
 
 }
 
+template <typename T>
+concept enum_serializer = requires() {
+    { T::serializations[0] } -> std::same_as<const std::string_view&>;
+};
+
 template <detail::c_enum T>
 std::optional<T> from_string(std::string_view name)
 {
     if constexpr (reflected<T>) return meta<T>::from_string(name);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
+template <detail::c_enum T, enum_serializer S>
+std::optional<T> from_string(std::string_view name)
+{
+    if constexpr (reflected<T>) return meta<T>::template from_string<S>(name);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
 template <detail::c_enum T>
@@ -337,10 +348,22 @@ std::string_view to_string(T value)
     if constexpr (reflected<T>) return meta<T>::to_string(value);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
+template <enum_serializer S, detail::c_enum T>
+std::string_view to_string(T value)
+{
+    if constexpr (reflected<T>) return meta<T>::template to_string<S>(value);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
 template <detail::c_enum T>
 std::string_view to_string_safe(T value)
 {
     if constexpr (reflected<T>) return meta<T>::to_string_safe(value);
+    else throw std::runtime_error{"reflection is not available for this enum"};
+}
+template <enum_serializer S, detail::c_enum T>
+std::string_view to_string_safe(T value)
+{
+    if constexpr (reflected<T>) return meta<T>::template to_string_safe<S>(value);
     else throw std::runtime_error{"reflection is not available for this enum"};
 }
 template <detail::c_enum T>
@@ -355,6 +378,16 @@ void for_each(F&& func)
 {
     if constexpr (reflected<T>) {
         for (const auto& it : meta<T>::enumerators) { func(it.value, it.name); }
+    } else throw std::runtime_error{"reflection is not available for this enum"};
+}
+
+template <detail::c_enum T, typename F>
+    requires std::invocable<F, size_t, T, std::string_view>
+void for_each_indexed(F&& func)
+{
+    if constexpr (reflected<T>) {
+        size_t i = 0;
+        for (const auto& it : meta<T>::enumerators) { func(i++, it.value, it.name); }
     } else throw std::runtime_error{"reflection is not available for this enum"};
 }
 
