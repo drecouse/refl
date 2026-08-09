@@ -60,9 +60,10 @@ inline void compile(CompilerInstance* CI, std::string const& FileName, IT FileBe
 
     assert(CInvNewCreated);
 
+    DiagnosticOptions opts{};
     CompilerInstance CINew{CInvNew};
     CINew.setTarget(&Target);
-    CINew.createDiagnostics(CI->getVirtualFileSystem());
+    CINew.createDiagnostics(CI->getVirtualFileSystem(), opts);
 
     // create rewrite buffer
     std::string FileContent{FileBegin, FileEnd};

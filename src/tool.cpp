@@ -19,9 +19,10 @@
 #include "llvm/Support/FormatVariadic.h"
 #include <filesystem>
 #include <fstream>
-#include "clang/Tooling/DependencyScanning/DependencyScanningService.h"
-#include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
-#include "clang/Tooling/DependencyScanning/DependencyScanningWorker.h"
+#include "clang/DependencyScanning/DependencyScanningService.h"
+#include "clang/Tooling/DependencyScanningTool.h"
+#include "clang/DependencyScanning/DependencyScanningWorker.h"
+#include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Program.h"
 
@@ -693,7 +694,7 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-    using namespace clang::tooling::dependencies;
+    using namespace clang::dependencies;
 std::string ErrorMessage;
 std::unique_ptr<tooling::CompilationDatabase> Compilations =
       getCompilationDatabase(ErrorMessage);
@@ -778,19 +779,21 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
       AdjustingCompilations->getAllCompileCommands();
 
   DependencyScanningService Service(ScanningMode::DependencyDirectivesScan, ScanningOutputFormat::Make, ScanningOptimizations::Default);
-    DependencyScanningTool WorkerTool(Service);
+    clang::tooling::DependencyScanningTool WorkerTool(Service);
     for (auto& it : Inputs) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
         if (fs::equivalent(it.Filename, argv[1])) {
 #pragma clang diagnostic pop
             it.CommandLine.push_back("-DREFL_GENERATE");
-            auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory);
-            if (auto E = res.takeError()) {
-                auto str = toString(std::move(E));
-                if (str != "") llvm::errs() << "Error happened during dependency generation: " << str << "\n";
-                break;
-            }
+            DiagnosticOptions DiagOpts;
+            TextDiagnosticPrinter DiagConsumer(llvm::errs(), DiagOpts);
+            auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory, DiagConsumer);
+            //if (auto E = res.takeError()) {
+            //    auto str = toString(std::move(E));
+            //    if (str != "") llvm::errs() << "Error happened during dependency generation: " << str << "\n";
+            //    break;
+            //}
             auto p = fs::absolute(fs::path{dependencyOutput.getValue()});
             auto fn = p;
             fn.remove_filename();
