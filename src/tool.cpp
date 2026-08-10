@@ -798,8 +798,10 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
             auto fn = p;
             fn.remove_filename();
             fs::create_directories(fn);
-            auto f = std::ofstream{p};
-            f << *res << "\n";
+            if (res) {
+                auto f = std::ofstream{p};
+                f << *res << "\n";
+            }
             break;
         }
     }
