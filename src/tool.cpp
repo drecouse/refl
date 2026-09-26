@@ -778,7 +778,10 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   std::vector<tooling::CompileCommand> Inputs =
       AdjustingCompilations->getAllCompileCommands();
 
-  DependencyScanningService Service(ScanningMode::DependencyDirectivesScan, ScanningOutputFormat::Make, ScanningOptimizations::Default);
+  DependencyScanningServiceOptions ServiceOpts;
+  ServiceOpts.Mode = ScanningMode::DependencyDirectivesScan;
+  ServiceOpts.OptimizeArgs = ScanningOptimizations::Default;
+  DependencyScanningService Service(std::move(ServiceOpts));
     clang::tooling::DependencyScanningTool WorkerTool(Service);
     for (auto& it : Inputs) {
 #pragma clang diagnostic push
@@ -788,7 +791,11 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
             it.CommandLine.push_back("-DREFL_GENERATE");
             DiagnosticOptions DiagOpts;
             TextDiagnosticPrinter DiagConsumer(llvm::errs(), DiagOpts);
-            auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory, DiagConsumer);
+            auto res = WorkerTool.getDependencyFile(it.CommandLine, it.Directory, nullptr, DiagConsumer);
+            if (!res) {
+                llvm::errs() << "Error happened during dependency generation.\n";
+                break;
+            }
             //if (auto E = res.takeError()) {
             //    auto str = toString(std::move(E));
             //    if (str != "") llvm::errs() << "Error happened during dependency generation: " << str << "\n";
