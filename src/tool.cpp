@@ -594,6 +594,18 @@ static cl::opt<std::string> dependencyOutput("dependency-output", cl::desc("Wher
 
 #pragma clang diagnostic pop
 
+static tooling::CommandLineArguments stripPch(const tooling::CommandLineArguments& Args, StringRef /*FileName*/)
+{
+    tooling::CommandLineArguments Ret;
+    for (size_t I = 0; I < Args.size(); ++I) {
+        bool Xclang = Args[I] == "-Xclang" && I + 1 < Args.size();
+        if (StringRef{Args[I]}.starts_with("@") && StringRef{Args[I]}.ends_with(".modmap")) continue;
+        if ((Xclang ? Args[I + 1] : Args[I]) != "-include-pch") Ret.push_back(Args[I]);
+        else I += Xclang ? 3 : 1;
+    }
+    return Ret;
+}
+
 static std::unique_ptr<tooling::CompilationDatabase>
 getCompilationDatabase(std::string &ErrorMessage) {
   if (CompilationDB.empty()) {
@@ -722,6 +734,7 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   auto AdjustingCompilations =
       std::make_unique<tooling::ArgumentsAdjustingCompilations>(
           std::move(Compilations));
+  AdjustingCompilations->appendArgumentsAdjuster(stripPch);
   AdjustingCompilations->appendArgumentsAdjuster(
       [](const tooling::CommandLineArguments &Args,
                           StringRef _ /*FileName*/) {
@@ -845,7 +858,7 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
     );
     MatchFinder.addMatcher(ReflectedEnumMatchExpression.bind("refl_enum"), &MatchRecordCallback);
 
-  auto Err = Executor->get()->execute(clang::tooling::newFrontendActionFactory(&MatchFinder));
+  auto Err = Executor->get()->execute(clang::tooling::newFrontendActionFactory(&MatchFinder), stripPch);
   if (Err) {
     llvm::errs() << llvm::toString(std::move(Err)) << "\n";
   }
