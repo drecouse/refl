@@ -11,6 +11,12 @@ add_library(refl INTERFACE)
 target_include_directories(refl INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
+if(WIN32)
+    find_package(zstd CONFIG QUIET)
+    if(TARGET zstd::libzstd_shared AND NOT TARGET zstd::libzstd_static)
+        add_library(zstd::libzstd_static ALIAS zstd::libzstd_shared)
+    endif()
+endif()
 find_package(LLVM CONFIG REQUIRED)
 find_package(Clang CONFIG REQUIRED)
 list(APPEND
@@ -67,10 +73,18 @@ clang_target_link_libraries(refl-tool
     clangDependencyScanning
 )
 
-target_include_directories(refl-tool SYSTEM PRIVATE 
+target_include_directories(refl-tool SYSTEM PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${CLANG_INCLUDE_DIRS}
 )
+
+if(WIN32 AND TARGET zstd::libzstd_shared)
+    find_file(REFL_ZLIB_DLL NAMES zlib1.dll zlib.dll HINTS ${ZLIB_INCLUDE_DIR}/../bin NO_DEFAULT_PATH)
+    add_custom_command(TARGET refl-tool POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:refl-tool> $<$<BOOL:${REFL_ZLIB_DLL}>:${REFL_ZLIB_DLL}> $<TARGET_FILE_DIR:refl-tool>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
 
 if(NOT PROJECT_IS_TOP_LEVEL)
     set(REFL_RELEASE_COMPILE_OPTIONS -g0 -O3 -w -ffast-math -flto=full  -fstrict-vtable-pointers -fwhole-program-vtables)
