@@ -25,6 +25,8 @@
 #include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Program.h"
+#include <cstdio>
+#include <cstdlib>
 
 using namespace clang;
 //using namespace clang::tooling;
@@ -866,4 +868,14 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
       [](llvm::StringRef key, llvm::StringRef value) {
         llvm::errs() << "----" << key.str() << "\n" << value.str() << "\n";
       });
+
+  // All output has been written by this point. Recent LLVM/Clang versions
+  // crash (use-after-free) when destroying the ArgumentsAdjustingCompilations
+  // instance owned internally by the executor created via
+  // createExecutorFromCommandLineArgs together with the separately parsed
+  // Compilations/AdjustingCompilations used above for dependency scanning.
+  // Skip that destructor chain entirely; the process is about to exit and
+  // the OS reclaims everything anyway.
+  std::fflush(nullptr);
+  std::_Exit(0);
 }

@@ -78,6 +78,9 @@ target_include_directories(refl-tool SYSTEM PRIVATE
     ${CLANG_INCLUDE_DIRS}
 )
 
+if(WIN32)
+    target_link_options(refl-tool PRIVATE LINKER:/STACK:16777216)
+endif()
 if(WIN32 AND TARGET zstd::libzstd_shared)
     find_file(REFL_ZLIB_DLL NAMES zlib1.dll zlib.dll HINTS ${ZLIB_INCLUDE_DIR}/../bin NO_DEFAULT_PATH)
     add_custom_command(TARGET refl-tool POST_BUILD
@@ -121,6 +124,13 @@ function(refl_config_source SOURCE)
         foreach(INC ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
             list(APPEND REFL_IMPLICIT_INC_DIRS --extra-arg=-I${INC}) 
         endforeach()
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        if (NOT DEFINED CACHE{REFL_RESOURCE_DIR})
+            execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-resource-dir OUTPUT_VARIABLE resource_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+            file(TO_CMAKE_PATH "${resource_dir}" resource_dir)
+            set(REFL_RESOURCE_DIR ${resource_dir} CACHE INTERNAL "")
+        endif()
+        list(APPEND REFL_IMPLICIT_INC_DIRS --extra-arg=-resource-dir=${REFL_RESOURCE_DIR})
     endif()
     set(META_SOURCE ${SOURCE})
     string(APPEND META_SOURCE ".meta.inc")
