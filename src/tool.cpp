@@ -267,13 +267,15 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
 
                 if (i++ != 0)
                     ss += ',';
-                if (it->isInstance()) {
-                    ss += formatv("refl::Func<static_cast<{0}({1}::*)", ret, sname);
+                if (recordDecl->lookup(it->getDeclName()).isSingleResult()) {
+                    ss += formatv("refl::Func<&{0}::{1}", sname, str);
+                } else if (it->isInstance()) {
+                    ss += formatv("refl::Func<static_cast<{0}({1}::*)({2}){3}>(&{1}::{4})", ret, sname, params, rqual, str);
                 } else {
-                    ss += formatv("refl::Func<static_cast<{0}(*)", ret);
+                    ss += formatv("refl::Func<static_cast<{0}(*)({1}){2}>(&{3}::{4})", ret, params, rqual, sname, str);
                 }
                 ss +=
-                    formatv("({0}){6}>(&{1}::{2}),\"{2}\",\"{3}\",\"{2}({0}){6}\",{4}"
+                    formatv(",\"{2}\",\"{3}\",\"{2}({0}){6}\",{4}"
                             ",refl::AccessSpecifier::{5},{7},refl::PList<REFL_TUPLE<{8}>{9}>",
                             params, sname, str, strq, it->isVirtual(), accs, rqual, ret, params, paramNames);
                 const auto& attrs = it->getAttrs();
@@ -533,7 +535,7 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
         }
 
         ss += formatv(
-            "default:{{assert(false);__builtin_unreachable();}}}"
+            "default:{{assert(false);REFL_UNREACHABLE();}}}"
             "static constexpr std::string_view to_string({0} "
             "v)noexcept{{switch(v){{",
             qname
@@ -545,7 +547,7 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
             ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
         }
 
-        ss += formatv("default:{{assert(false);__builtin_unreachable();}}}"
+        ss += formatv("default:{{assert(false);REFL_UNREACHABLE();}}}"
                       "static constexpr std::string_view "
                       "to_string_safe({0} v)noexcept{{switch(v){{",
                       qname);
@@ -602,6 +604,7 @@ static tooling::CommandLineArguments stripPch(const tooling::CommandLineArgument
     for (size_t I = 0; I < Args.size(); ++I) {
         bool Xclang = Args[I] == "-Xclang" && I + 1 < Args.size();
         if (StringRef{Args[I]}.starts_with("@") && StringRef{Args[I]}.ends_with(".modmap")) continue;
+        if (StringRef{Args[I]}.size() > 3 && StringRef{"/-"}.contains(Args[I][0]) && llvm::is_contained({"Yu", "Yc", "Fp"}, StringRef{Args[I]}.substr(1, 2))) continue;
         if ((Xclang ? Args[I + 1] : Args[I]) != "-include-pch") Ret.push_back(Args[I]);
         else I += Xclang ? 3 : 1;
     }
@@ -861,7 +864,8 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
     MatchFinder.addMatcher(ReflectedEnumMatchExpression.bind("refl_enum"), &MatchRecordCallback);
 
   auto Err = Executor->get()->execute(clang::tooling::newFrontendActionFactory(&MatchFinder), stripPch);
-  if (Err) {
+  const bool Failed = static_cast<bool>(Err);
+  if (Failed) {
     llvm::errs() << llvm::toString(std::move(Err)) << "\n";
   }
   Executor->get()->getToolResults()->forEachResult(
@@ -877,5 +881,5 @@ std::unique_ptr<tooling::CompilationDatabase> Compilations =
   // Skip that destructor chain entirely; the process is about to exit and
   // the OS reclaims everything anyway.
   std::fflush(nullptr);
-  std::_Exit(0);
+  std::_Exit(Failed ? 1 : 0);
 }

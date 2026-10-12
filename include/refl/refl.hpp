@@ -15,6 +15,12 @@
 
 #define REFL_ACCESS() template<typename> friend struct refl::meta
 
+#if defined(_MSC_VER) && !defined(__clang__)
+    #define REFL_UNREACHABLE() __assume(0)
+#else
+    #define REFL_UNREACHABLE() __builtin_unreachable()
+#endif
+
 // include generated meta defines, REFL_META_FILE is defined to be the meta file for the currently compiled source file
 #if !defined REFL_GENERATE && !defined REFL_PLUGIN_LOADED
 #include REFL_META_FILE

@@ -19,6 +19,9 @@ if(WIN32)
 endif()
 find_package(LLVM CONFIG REQUIRED)
 find_package(Clang CONFIG REQUIRED)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(REFL_RESOURCE_DIR ${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR} CACHE INTERNAL "")
+endif()
 list(APPEND
     CMAKE_MODULE_PATH
     ${LLVM_CMAKE_DIR}
@@ -124,7 +127,7 @@ function(refl_config_source SOURCE)
         foreach(INC ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
             list(APPEND REFL_IMPLICIT_INC_DIRS --extra-arg=-I${INC}) 
         endforeach()
-    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "^(Clang|MSVC)$")
         if (NOT DEFINED CACHE{REFL_RESOURCE_DIR})
             execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-resource-dir OUTPUT_VARIABLE resource_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
             file(TO_CMAKE_PATH "${resource_dir}" resource_dir)

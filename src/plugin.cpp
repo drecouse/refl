@@ -211,13 +211,15 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
 
                 if (i++ != 0)
                     ss += ',';
-                if (it->isInstance()) {
-                    ss += formatv("refl::Func<static_cast<{0}({1}::*)", ret, sname);
+                if (recordDecl->lookup(it->getDeclName()).isSingleResult()) {
+                    ss += formatv("refl::Func<&{0}::{1}", sname, str);
+                } else if (it->isInstance()) {
+                    ss += formatv("refl::Func<static_cast<{0}({1}::*)({2}){3}>(&{1}::{4})", ret, sname, params, rqual, str);
                 } else {
-                    ss += formatv("refl::Func<static_cast<{0}(*)", ret);
+                    ss += formatv("refl::Func<static_cast<{0}(*)({1}){2}>(&{3}::{4})", ret, params, rqual, sname, str);
                 }
                 ss +=
-                    formatv("({0}){6}>(&{1}::{2}),\"{2}\",\"{3}\",\"{2}({0}){6}\",{4}"
+                    formatv(",\"{2}\",\"{3}\",\"{2}({0}){6}\",{4}"
                             ",refl::AccessSpecifier::{5},{7},refl::PList<REFL_TUPLE<{8}>{9}>",
                             params, sname, str, strq, it->isVirtual(), accs, rqual, ret, params, paramNames);
                 const auto& attrs = it->getAttrs();
@@ -447,7 +449,7 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
         }
 
         ss += formatv(
-            "default:{{assert(false);__builtin_unreachable();}}}"
+            "default:{{assert(false);REFL_UNREACHABLE();}}}"
             "static constexpr std::string_view to_string({0} "
             "v)noexcept{{switch(v){{",
             qname
@@ -459,7 +461,7 @@ void ReflRecordMatchCallback::run(ast_matchers::MatchFinder::MatchResult const& 
             ss += formatv("case {0}::{1}:return enumerators[{2}].name;", qname, n, i++);
         }
 
-        ss += formatv("default:{{assert(false);__builtin_unreachable();}}}"
+        ss += formatv("default:{{assert(false);REFL_UNREACHABLE();}}}"
                       "static constexpr std::string_view "
                       "to_string_safe({0} v)noexcept{{switch(v){{",
                       qname);
